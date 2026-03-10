@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Work Progress Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo-section">
+                    <h1>DAILY WORK</h1>
+                    <p class="subtitle">PROGRESS DASHBOARD</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <p class="date-display" id="current-date">Monday, 10 March 2026</p>
+                <p class="report-info">EOD Report - Team: Operations</p>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="dashboard">Today's Dashboard</button>
+            <button class="tab-btn" data-tab="create-dashboard">Create Dashboard</button>
+            <button class="tab-btn" data-tab="employees">Add Employees</button>
+            <button class="tab-btn" data-tab="tasks">Create Tasks</button>
+            <button class="tab-btn" data-tab="history">Dashboard History</button>
+        </nav>
+
+        <!-- Tab 1: Today's Dashboard -->
+        <section id="dashboard" class="tab-content active">
+            <div class="dashboard-controls">
+                <div class="date-selector">
+                    <label for="dashboard-date">Select Date:</label>
+                    <input type="date" id="dashboard-date">
+                </div>
+                <button class="btn-export" id="export-pdf">Export to PDF</button>
+            </div>
+
+            <div id="dashboard-content">
+                <!-- Summary Cards -->
+                <div class="summary-cards">
+                    <div class="stat-card blue">
+                        <div class="stat-value" id="stat-total">12</div>
+                        <div class="stat-label">TOTAL PEOPLE</div>
+                        <div class="stat-sublabel">Full Team</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-value" id="stat-active">9</div>
+                        <div class="stat-label">ACTIVE TODAY</div>
+                        <div class="stat-sublabel">75% Attendance</div>
+                    </div>
+                    <div class="stat-card yellow">
+                        <div class="stat-value" id="stat-leave">2</div>
+                        <div class="stat-label">ON LEAVE</div>
+                        <div class="stat-sublabel">Planned</div>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="stat-value" id="stat-closed">63</div>
+                        <div class="stat-label">TASKS CLOSED</div>
+                        <div class="stat-sublabel">Out of 89 Total</div>
+                    </div>
+                </div>
+
+                <!-- Employee Task Breakdown -->
+                <h2 class="section-title">EMPLOYEE TASK BREAKDOWN</h2>
+                <div class="employee-grid" id="employee-breakdown">
+                    <!-- Employee cards will be loaded here -->
+                </div>
+
+                <!-- Pending & In-Progress Tracker -->
+                <h2 class="section-title">PENDING & IN-PROGRESS TRACKER</h2>
+                <div class="tasks-table-container">
+                    <table class="tasks-table">
+                        <thead>
+                            <tr>
+                                <th>EMPLOYEE</th>
+                                <th>TASK</th>
+                                <th>STATUS</th>
+                                <th>DEADLINE</th>
+                                <th>PRIORITY</th>
+                                <th>NOTES</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-tasks-body">
+                            <!-- Tasks will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- EOD Summary -->
+                <h2 class="section-title">EOD SUMMARY</h2>
+                <div class="eod-summary">
+                    <div class="eod-card">
+                        <div class="eod-value" id="eod-total">0</div>
+                        <div class="eod-label">Total Tasks Assigned</div>
+                    </div>
+                    <div class="eod-card">
+                        <div class="eod-value green" id="eod-completed">0</div>
+                        <div class="eod-label">Completed Today</div>
+                    </div>
+                    <div class="eod-card">
+                        <div class="eod-value red" id="eod-pending">0</div>
+                        <div class="eod-label">Pending Attention</div>
+                    </div>
+                    <div class="eod-card">
+                        <div class="eod-value yellow" id="eod-inprogress">0</div>
+                        <div class="eod-label">In Progress</div>
+                    </div>
+                    <div class="eod-card">
+                        <div class="eod-value red" id="eod-deadline-extended">0</div>
+                        <div class="eod-label">Deadline Extended</div>
+                    </div>
+                    <div class="eod-card">
+                        <div class="eod-value" id="eod-updated">0</div>
+                        <div class="eod-label">Tasks Updated</div>
+                    </div>
+                    <div class="eod-card">
+                        <div class="eod-value" id="eod-verified">0</div>
+                        <div class="eod-label">Verified by Admin</div>
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <span class="legend-dot green"></span> GREEN = On Track
+                    <span class="legend-dot yellow"></span> YELLOW = Needs Attention
+                    <span class="legend-dot red"></span> RED = Overdue / Incomplete
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: Create Dashboard -->
+        <section id="create-dashboard" class="tab-content">
+            <div class="form-container">
+                <h2 class="form-title">Create Daily Dashboard</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="create-date">Date</label>
+                        <input type="date" id="create-date" required>
+                    </div>
+                </div>
+
+                <h3>Team Summary</h3>
+                <div class="form-row four-cols">
+                    <div class="form-group">
+                        <label>Total People (Auto)</label>
+                        <div class="stat-preview" id="preview-total-people">0</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Active Today</label>
+                        <select id="active-employees" multiple class="multi-select" size="4">
+                            <option value="">Select employees...</option>
+                        </select>
+                        <small class="hint">Hold Ctrl/Cmd to select multiple</small>
+                        <div class="stat-preview" id="preview-active-count">0 selected</div>
+                    </div>
+                    <div class="form-group">
+                        <label>On Leave</label>
+                        <select id="onleave-employees" multiple class="multi-select" size="4">
+                            <option value="">Select employees...</option>
+                        </select>
+                        <small class="hint">Hold Ctrl/Cmd to select multiple</small>
+                        <div class="stat-preview" id="preview-onleave-count">0 selected</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Tasks Closed (Auto)</label>
+                        <div class="stat-preview" id="preview-tasks-closed">0</div>
+                        <small class="hint">Tasks marked as Done</small>
+                    </div>
+                </div>
+
+                <h3>EOD Summary (Auto from Tasks)</h3>
+                <div class="form-row multi-cols">
+                    <div class="form-group">
+                        <label>Total Assigned</label>
+                        <div class="stat-preview" id="preview-total-assigned">0</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Completed Today</label>
+                        <div class="stat-preview green" id="preview-completed">0</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Pending Attention</label>
+                        <div class="stat-preview red" id="preview-pending">0</div>
+                    </div>
+                    <div class="form-group">
+                        <label>In Progress</label>
+                        <div class="stat-preview yellow" id="preview-inprogress">0</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Deadline Extended</label>
+                        <div class="stat-preview red" id="preview-deadline-extended">0</div>
+                        <small class="hint">Tasks with extended deadlines</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Tasks Updated</label>
+                        <div class="stat-preview" id="preview-tasks-updated">0</div>
+                        <small class="hint">Count of checked boxes below</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Verified by Admin</label>
+                        <div class="stat-preview" id="preview-verified">0</div>
+                        <small class="hint">Employees not in verify pending</small>
+                    </div>
+                </div>
+
+                <h3>Employee Task Breakdown</h3>
+                <p class="section-hint">Task counts are auto-calculated from tasks. Only checkboxes are editable.</p>
+                <div id="employee-stats-container">
+                    <!-- Employee stat cards will be generated here -->
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn-primary" id="save-dashboard">Save Dashboard</button>
+                    <div class="message" id="dashboard-message"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 3: Add Employees -->
+        <section id="employees" class="tab-content">
+            <div class="form-container">
+                <h2 class="form-title">Add New Employee</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="emp-name">Full Name *</label>
+                        <input type="text" id="emp-name" placeholder="Enter full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="emp-department">Department *</label>
+                        <input type="text" id="emp-department" placeholder="e.g., Engineering" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="emp-designation">Designation *</label>
+                        <input type="text" id="emp-designation" placeholder="e.g., Backend Dev" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="emp-type">Employee Type *</label>
+                        <select id="emp-type" required>
+                            <option value="">Select type</option>
+                            <option value="Full-time">Full-time</option>
+                            <option value="Part-time">Part-time</option>
+                            <option value="Contract">Contract</option>
+                            <option value="Intern">Intern</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn-primary" id="add-employee">Add Employee</button>
+                    <div class="message" id="employee-message"></div>
+                </div>
+            </div>
+
+            <div class="list-container">
+                <h2 class="form-title">Employee List</h2>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Avatar</th>
+                                <th>Name</th>
+                                <th>Department</th>
+                                <th>Designation</th>
+                                <th>Type</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="employee-list">
+                            <!-- Employees will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 4: Create Tasks -->
+        <section id="tasks" class="tab-content">
+            <div class="tasks-controls">
+                <div class="filter-row">
+                    <div class="form-group">
+                        <label for="task-filter-date">Date</label>
+                        <input type="date" id="task-filter-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="task-filter-employee">Employee</label>
+                        <select id="task-filter-employee">
+                            <option value="">All Employees</option>
+                        </select>
+                    </div>
+                    <button class="btn-secondary" id="apply-filters">Apply Filters</button>
+                </div>
+                <button class="btn-primary" id="toggle-task-form">+ Create New Task</button>
+            </div>
+
+            <!-- Expandable Task Form -->
+            <div class="task-form-container" id="task-form-container" style="display: none;">
+                <h3>Create New Task</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="task-employee">Assign to Employee *</label>
+                        <select id="task-employee" required>
+                            <option value="">Select Employee</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-date">Date *</label>
+                        <input type="date" id="task-date" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="task-name">Task Name *</label>
+                        <input type="text" id="task-name" placeholder="Enter task name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-status">Status</label>
+                        <select id="task-status">
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Done">Done</option>
+                            <option value="Deadline Extended">Deadline Extended</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="task-deadline">Deadline <span id="deadline-required" style="color: #e74c3c; display: none;">*</span></label>
+                        <input type="date" id="task-deadline">
+                        <small id="deadline-hint" style="color: #e74c3c; display: none;">Deadline is required when status is "Deadline Extended"</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-priority">Priority</label>
+                        <select id="task-priority">
+                            <option value="Low">Low</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="task-details">Details</label>
+                    <textarea id="task-details" rows="3" placeholder="Optional task details"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="task-notes">Notes</label>
+                        <input type="text" id="task-notes" placeholder="Additional notes">
+                    </div>
+                    <div class="form-group">
+                        <label for="task-verified">Task Verified</label>
+                        <select id="task-verified">
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn-primary" id="save-task">Save Task</button>
+                    <button class="btn-secondary" id="cancel-task">Cancel</button>
+                    <div class="message" id="task-message"></div>
+                </div>
+            </div>
+
+            <!-- Edit Task Modal -->
+            <div class="modal-overlay" id="edit-task-modal" style="display: none;">
+                <div class="modal">
+                    <h3>Edit Task</h3>
+                    <input type="hidden" id="edit-task-id">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-task-employee">Assign to Employee</label>
+                            <select id="edit-task-employee"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-task-date">Date</label>
+                            <input type="date" id="edit-task-date">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-task-name">Task Name</label>
+                            <input type="text" id="edit-task-name">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-task-status">Status</label>
+                            <select id="edit-task-status">
+                                <option value="Pending">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Done">Done</option>
+                                <option value="Deadline Extended">Deadline Extended</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-task-deadline">Deadline <span id="edit-deadline-required" style="color: #e74c3c; display: none;">*</span></label>
+                            <input type="date" id="edit-task-deadline">
+                            <small id="edit-deadline-hint" style="color: #e74c3c; display: none;">Deadline is required when status is "Deadline Extended"</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-task-priority">Priority</label>
+                            <select id="edit-task-priority">
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-task-details">Details</label>
+                        <textarea id="edit-task-details" rows="2"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-task-notes">Notes</label>
+                            <input type="text" id="edit-task-notes">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-task-verified">Task Verified</label>
+                            <select id="edit-task-verified">
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" id="update-task-btn">Update Task</button>
+                        <button class="btn-secondary" id="close-edit-modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task List -->
+            <div class="list-container">
+                <h3>Task List</h3>
+                <!-- Column Filters -->
+                <div class="column-filters">
+                    <div class="filter-row">
+                        <input type="text" id="search-all" placeholder="🔍 Search all tasks..." class="search-input">
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table" id="task-table">
+                        <thead>
+                            <tr class="header-row">
+                                <th>Employee</th>
+                                <th>Created Date & Time</th>
+                                <th>Task Name</th>
+                                <th>Status</th>
+                                <th>Deadline</th>
+                                <th>Priority</th>
+                                <th>Verified</th>
+                                <th>Actions</th>
+                            </tr>
+                            <tr class="filter-row">
+                                <th>
+                                    <select id="filter-employee" class="column-filter">
+                                        <option value="">All Employees</option>
+                                    </select>
+                                </th>
+                                <th>
+                                    <input type="text" id="filter-created" placeholder="Filter..." class="column-filter-input">
+                                </th>
+                                <th>
+                                    <input type="text" id="filter-task-name" placeholder="Filter..." class="column-filter-input">
+                                </th>
+                                <th>
+                                    <select id="filter-status" class="column-filter">
+                                        <option value="">All Status</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="Done">Done</option>
+                                        <option value="Deadline Extended">Deadline Extended</option>
+                                    </select>
+                                </th>
+                                <th>
+                                    <input type="text" id="filter-deadline" placeholder="Filter..." class="column-filter-input">
+                                </th>
+                                <th>
+                                    <select id="filter-priority" class="column-filter">
+                                        <option value="">All Priority</option>
+                                        <option value="High">High</option>
+                                        <option value="Medium">Medium</option>
+                                        <option value="Low">Low</option>
+                                    </select>
+                                </th>
+                                <th>
+                                    <select id="filter-verified" class="column-filter">
+                                        <option value="">All</option>
+                                        <option value="Yes">Yes</option>
+                                        <option value="No">No</option>
+                                    </select>
+                                </th>
+                                <th>
+                                    <button class="btn-small btn-secondary" id="clear-filters">Clear</button>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="task-list">
+                            <!-- Tasks will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination-info">
+                    <span id="showing-count">Showing 0 of 0 tasks</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 5: Dashboard History -->
+        <section id="history" class="tab-content">
+            <div class="history-controls">
+                <div class="filter-row">
+                    <div class="form-group">
+                        <label for="history-start-date">From Date</label>
+                        <input type="date" id="history-start-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="history-end-date">To Date</label>
+                        <input type="date" id="history-end-date">
+                    </div>
+                    <button class="btn-secondary" id="apply-history-filters">Filter</button>
+                    <button class="btn-primary" id="export-bulk">Export Selected Range to PDF</button>
+                </div>
+            </div>
+
+            <div class="list-container">
+                <div class="table-wrapper">
+                    <table class="data-table history-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Total People</th>
+                                <th>Active</th>
+                                <th>On Leave</th>
+                                <th>Tasks Closed</th>
+                                <th>Completed</th>
+                                <th>Pending</th>
+                                <th>In Progress</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-list">
+                            <!-- History entries will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

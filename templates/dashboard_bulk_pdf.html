@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4 landscape; margin: 15mm; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: #fff; color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 20px; }
+        .logo-section h1 { margin: 0; font-size: 24px; color: #1a1a2e; }
+        .subtitle { margin: 2px 0 0; font-size: 12px; color: #3498db; letter-spacing: 1px; }
+        .header-right { text-align: right; }
+        .date-range { margin: 0; font-size: 14px; color: #666; }
+        .report-info { margin: 5px 0 0; font-size: 11px; color: #999; }
+        
+        .section-title { font-size: 14px; color: #3498db; margin: 20px 0 10px; padding-bottom: 5px; border-bottom: 1px solid #eee; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .history-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+        .history-table th { background: #1a1a2e; color: white; padding: 10px; text-align: left; font-size: 9px; text-transform: uppercase; }
+        .history-table td { padding: 10px; border-bottom: 1px solid #eee; }
+        .history-table tr:nth-child(even) { background: #f8f9fa; }
+        .history-table tr:hover { background: #e8f4f8; }
+        .date-cell { font-weight: 600; color: #3498db; }
+        .number-cell { text-align: center; }
+        .status-good { color: #2ecc71; font-weight: 600; }
+        .status-warning { color: #f1c40f; font-weight: 600; }
+        .status-danger { color: #e74c3c; font-weight: 600; }
+        
+        .summary-row { background: #1a1a2e !important; color: white; font-weight: 600; }
+        .summary-row td { border-top: 2px solid #3498db; }
+        
+        .footer { text-align: center; font-size: 8px; color: #999; margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; }
+        .page-break { page-break-after: always; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-section">
+            <h1>DAILY WORK</h1>
+            <p class="subtitle">PROGRESS DASHBOARD - HISTORY REPORT</p>
+        </div>
+        <div class="header-right">
+            <p class="date-range">{{ start_date }} to {{ end_date }}</p>
+            <p class="report-info">EOD Report - Team: Operations</p>
+        </div>
+    </div>
+
+    <h2 class="section-title">DASHBOARD HISTORY</h2>
+    <table class="history-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th class="number-cell">Total People</th>
+                <th class="number-cell">Active</th>
+                <th class="number-cell">On Leave</th>
+                <th class="number-cell">Tasks Closed</th>
+                <th class="number-cell">Total Assigned</th>
+                <th class="number-cell">Completed</th>
+                <th class="number-cell">Pending</th>
+                <th class="number-cell">In Progress</th>
+                <th class="number-cell">Updated</th>
+                <th class="number-cell">Verified</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set totals = namespace(total_people=0, active=0, leave=0, closed=0, assigned=0, completed=0, pending=0, inprogress=0, updated=0, verified=0) %}
+            {% for dash in dashboards %}
+            {% set totals.total_people = totals.total_people + dash.total_people %}
+            {% set totals.active = totals.active + dash.active_today %}
+            {% set totals.leave = totals.leave + dash.on_leave %}
+            {% set totals.closed = totals.closed + dash.tasks_closed %}
+            {% set totals.assigned = totals.assigned + dash.total_assigned %}
+            {% set totals.completed = totals.completed + dash.completed_today %}
+            {% set totals.pending = totals.pending + dash.pending_attention %}
+            {% set totals.inprogress = totals.inprogress + dash.in_progress_count %}
+            {% set totals.updated = totals.updated + dash.tasks_updated %}
+            {% set totals.verified = totals.verified + dash.verified_by_lead %}
+            <tr>
+                <td class="date-cell">{{ dash.date }}</td>
+                <td class="number-cell">{{ dash.total_people }}</td>
+                <td class="number-cell">{{ dash.active_today }}</td>
+                <td class="number-cell">{{ dash.on_leave }}</td>
+                <td class="number-cell">{{ dash.tasks_closed }}</td>
+                <td class="number-cell">{{ dash.total_assigned }}</td>
+                <td class="number-cell status-good">{{ dash.completed_today }}</td>
+                <td class="number-cell {% if dash.pending_attention > 5 %}status-danger{% elif dash.pending_attention > 2 %}status-warning{% endif %}">{{ dash.pending_attention }}</td>
+                <td class="number-cell status-warning">{{ dash.in_progress_count }}</td>
+                <td class="number-cell">{{ dash.tasks_updated }}</td>
+                <td class="number-cell">{{ dash.verified_by_lead }}</td>
+            </tr>
+            {% endfor %}
+            {% if dashboards|length > 0 %}
+            <tr class="summary-row">
+                <td>TOTALS / AVERAGES</td>
+                <td class="number-cell">{{ totals.total_people }}</td>
+                <td class="number-cell">{{ totals.active }}</td>
+                <td class="number-cell">{{ totals.leave }}</td>
+                <td class="number-cell">{{ totals.closed }}</td>
+                <td class="number-cell">{{ totals.assigned }}</td>
+                <td class="number-cell">{{ totals.completed }}</td>
+                <td class="number-cell">{{ totals.pending }}</td>
+                <td class="number-cell">{{ totals.inprogress }}</td>
+                <td class="number-cell">{{ totals.updated }}</td>
+                <td class="number-cell">{{ totals.verified }}</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Auto-generated | Confidential | For Internal Use Only<br>
+        --- Daily Progress Report ---
+    </div>
+</body>
+</html>

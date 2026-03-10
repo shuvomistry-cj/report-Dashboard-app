@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4 landscape; margin: 10mm; }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+            color: #e2e8f0;
+            font-size: 11px;
+        }
+        
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+            border-bottom: 3px solid #3498db; 
+            padding: 15px 20px; 
+            margin-bottom: 20px;
+            background: rgba(15, 23, 42, 0.8);
+        }
+        .logo-section h1 { margin: 0; font-size: 28px; color: #fff; font-weight: 700; }
+        .subtitle { margin: 4px 0 0; font-size: 12px; color: #3498db; letter-spacing: 2px; text-transform: uppercase; }
+        .header-right { text-align: right; }
+        .date-display { margin: 0; font-size: 14px; color: #94a3b8; }
+        .report-info { margin: 5px 0 0; font-size: 11px; color: #64748b; }
+        
+        .summary-cards { 
+            display: flex; 
+            justify-content: space-between; 
+            gap: 15px; 
+            margin: 0 20px 25px;
+        }
+        .stat-card { 
+            flex: 1; 
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 12px; 
+            padding: 20px 15px; 
+            text-align: center; 
+            border-top: 4px solid;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .stat-card.blue { border-color: #3498db; }
+        .stat-card.green { border-color: #2ecc71; }
+        .stat-card.yellow { border-color: #f1c40f; }
+        .stat-card.purple { border-color: #9b59b6; }
+        .stat-value { font-size: 36px; font-weight: bold; margin-bottom: 8px; }
+        .stat-card.blue .stat-value { color: #3498db; }
+        .stat-card.green .stat-value { color: #2ecc71; }
+        .stat-card.yellow .stat-value { color: #f1c40f; }
+        .stat-card.purple .stat-value { color: #9b59b6; }
+        .stat-label { font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+        .stat-sublabel { font-size: 9px; color: #64748b; margin-top: 4px; }
+        
+        .section-title { 
+            font-size: 14px; 
+            color: #3498db; 
+            margin: 25px 20px 15px; 
+            padding-bottom: 8px; 
+            border-bottom: 1px solid rgba(52, 152, 219, 0.3); 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        
+        .employee-grid { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 15px; 
+            margin: 0 20px 20px;
+        }
+        .employee-card { 
+            width: calc(33.33% - 10px); 
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 12px; 
+            padding: 15px;
+            border: 1px solid rgba(52, 152, 219, 0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .employee-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 12px; 
+        }
+        .emp-info { display: flex; align-items: center; gap: 10px; }
+        .emp-avatar { 
+            width: 40px; 
+            height: 40px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: white; 
+            font-size: 14px; 
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .emp-name { font-size: 13px; font-weight: 600; color: #fff; }
+        .emp-role { font-size: 10px; color: #94a3b8; }
+        .completion-badge { 
+            font-size: 10px; 
+            padding: 5px 10px; 
+            border-radius: 15px; 
+            font-weight: 600;
+            color: white;
+        }
+        .badge-yellow { background: linear-gradient(135deg, #f1c40f, #e67e22); }
+        .badge-green { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        .badge-orange { background: linear-gradient(135deg, #e67e22, #d35400); }
+        
+        .task-stats { 
+            display: flex; 
+            justify-content: space-between; 
+            margin: 12px 0;
+            padding: 10px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+        }
+        .task-stat { text-align: center; }
+        .task-stat-value { font-size: 18px; font-weight: bold; color: #fff; }
+        .task-stat-label { font-size: 8px; color: #64748b; text-transform: uppercase; margin-top: 3px; }
+        
+        .progress-section { margin-top: 10px; }
+        .progress-label { font-size: 9px; color: #64748b; margin-bottom: 5px; }
+        .progress-bar { 
+            height: 8px; 
+            background: rgba(255,255,255,0.1); 
+            border-radius: 4px; 
+            overflow: hidden;
+        }
+        .progress-fill { 
+            height: 100%; 
+            background: linear-gradient(90deg, #f1c40f, #e67e22); 
+            border-radius: 4px;
+        }
+        .progress-fill.green { background: linear-gradient(90deg, #2ecc71, #27ae60); }
+        
+        .status-tags { 
+            display: flex; 
+            gap: 6px; 
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .status-tag { 
+            font-size: 9px; 
+            padding: 4px 8px; 
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        .tag-green { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+        .tag-red { background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3); }
+        .tag-yellow { background: rgba(241, 196, 15, 0.2); color: #f1c40f; border: 1px solid rgba(241, 196, 15, 0.3); }
+        
+        .tasks-table { 
+            width: calc(100% - 40px); 
+            margin: 0 20px 20px;
+            border-collapse: collapse; 
+            font-size: 10px;
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .tasks-table th { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+            color: #3498db; 
+            padding: 12px 10px; 
+            text-align: left; 
+            font-size: 9px; 
+            text-transform: uppercase;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(52, 152, 219, 0.2);
+        }
+        .tasks-table td { 
+            padding: 10px; 
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: #e2e8f0;
+        }
+        .tasks-table tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+        .status-badge { 
+            font-size: 9px; 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+            font-weight: 600; 
+            text-transform: uppercase;
+            color: white;
+        }
+        .status-inprogress { background: linear-gradient(135deg, #f1c40f, #e67e22); color: #333; }
+        .status-pending { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        .status-extended { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .priority-high { color: #e74c3c; font-weight: 600; }
+        .priority-medium { color: #f1c40f; font-weight: 600; }
+        .priority-low { color: #2ecc71; font-weight: 600; }
+        
+        .eod-summary { 
+            display: flex; 
+            gap: 12px; 
+            margin: 0 20px 20px;
+        }
+        .eod-card { 
+            flex: 1; 
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 10px; 
+            padding: 15px 10px; 
+            text-align: center;
+            border: 1px solid rgba(52, 152, 219, 0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .eod-value { font-size: 24px; font-weight: bold; color: #fff; }
+        .eod-value.green { color: #2ecc71; }
+        .eod-value.red { color: #e74c3c; }
+        .eod-value.yellow { color: #f1c40f; }
+        .eod-label { font-size: 9px; color: #64748b; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .legend { 
+            text-align: center; 
+            font-size: 10px; 
+            color: #64748b; 
+            margin: 20px;
+            padding: 15px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+        }
+        .legend-dot { 
+            display: inline-block; 
+            width: 10px; 
+            height: 10px; 
+            border-radius: 50%; 
+            margin: 0 4px 0 15px; 
+        }
+        .dot-green { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+        .dot-yellow { background: linear-gradient(135deg, #f1c40f, #e67e22); }
+        .dot-red { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+        
+        .footer { 
+            text-align: center; 
+            font-size: 9px; 
+            color: #475569; 
+            margin: 20px; 
+            padding: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-section">
+            <h1>DAILY WORK</h1>
+            <p class="subtitle">PROGRESS DASHBOARD</p>
+        </div>
+        <div class="header-right">
+            <p class="date-display">{{ date }}</p>
+            <p class="report-info">EOD Report - Team: Operations</p>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    {% if dashboard.stats %}
+    <div class="summary-cards">
+        <div class="stat-card blue">
+            <div class="stat-value">{{ dashboard.stats.total_people }}</div>
+            <div class="stat-label">TOTAL PEOPLE</div>
+            <div class="stat-sublabel">Full Team</div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-value">{{ dashboard.stats.active_today }}</div>
+            <div class="stat-label">ACTIVE TODAY</div>
+            <div class="stat-sublabel">Team Members</div>
+        </div>
+        <div class="stat-card yellow">
+            <div class="stat-value">{{ dashboard.stats.on_leave }}</div>
+            <div class="stat-label">ON LEAVE</div>
+            <div class="stat-sublabel">Planned</div>
+        </div>
+        <div class="stat-card purple">
+            <div class="stat-value">{{ dashboard.stats.tasks_closed }}</div>
+            <div class="stat-label">TASKS CLOSED</div>
+            <div class="stat-sublabel">Completed Tasks</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Employee Task Breakdown -->
+    <h2 class="section-title">EMPLOYEE TASK BREAKDOWN</h2>
+    <div class="employee-grid">
+        {% for emp in dashboard.employee_breakdown %}
+        <div class="employee-card">
+            <div class="employee-header">
+                <div class="emp-info">
+                    <div class="emp-avatar" style="background: {{ emp.color }}">{{ emp.initials }}</div>
+                    <div>
+                        <div class="emp-name">{{ emp.name }}</div>
+                        <div class="emp-role">{{ emp.designation }}</div>
+                    </div>
+                </div>
+                <span class="completion-badge {% if emp.completion_rate >= 90 %}badge-green{% elif emp.completion_rate >= 50 %}badge-yellow{% else %}badge-orange{% endif %}">
+                    {{ emp.completion_rate }}% Done
+                </span>
+            </div>
+            <div class="task-stats">
+                <div class="task-stat">
+                    <div class="task-stat-value">{{ emp.assigned }}</div>
+                    <div class="task-stat-label">Assigned</div>
+                </div>
+                <div class="task-stat">
+                    <div class="task-stat-value" style="color: #2ecc71;">{{ emp.done }}</div>
+                    <div class="task-stat-label">Done</div>
+                </div>
+                <div class="task-stat">
+                    <div class="task-stat-value" style="color: #e74c3c;">{{ emp.pending }}</div>
+                    <div class="task-stat-label">Pending</div>
+                </div>
+                <div class="task-stat">
+                    <div class="task-stat-value" style="color: #f1c40f;">{{ emp.in_progress }}</div>
+                    <div class="task-stat-label">In Prog</div>
+                </div>
+            </div>
+            <div class="progress-section">
+                <div class="progress-label">TASK COMPLETION: {{ emp.done }}/{{ emp.assigned }}</div>
+                <div class="progress-bar">
+                    <div class="progress-fill {% if emp.completion_rate >= 80 %}green{% endif %}" style="width: {{ emp.completion_rate }}%;"></div>
+                </div>
+            </div>
+            <div class="status-tags">
+                {% if emp.task_updated %}
+                <span class="status-tag tag-green">✓ Task/s Updated</span>
+                {% else %}
+                <span class="status-tag tag-red">✗ No Tasks Updated</span>
+                {% endif %}
+                {% if emp.verify_pending %}
+                <span class="status-tag tag-red">⚠ Verify Pending</span>
+                {% else %}
+                <span class="status-tag tag-green">✓ Tasks Verified</span>
+                {% endif %}
+                {% if emp.deadline_extended > 0 %}
+                <span class="status-tag tag-yellow">⏱ Deadline Extended {{ emp.deadline_extended }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pending & In-Progress Tracker -->
+    {% if dashboard.pending_tasks %}
+    <h2 class="section-title">PENDING & IN-PROGRESS TRACKER</h2>
+    <table class="tasks-table">
+        <thead>
+            <tr>
+                <th>EMPLOYEE</th>
+                <th>TASK</th>
+                <th>STATUS</th>
+                <th>DEADLINE</th>
+                <th>PRIORITY</th>
+                <th>NOTES</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in dashboard.pending_tasks %}
+            <tr>
+                <td>{{ task.employee_name }}</td>
+                <td>{{ task.task_name }}</td>
+                <td>
+                    {% if task.status == 'Deadline Extended' %}
+                    <span class="status-badge status-extended">{{ task.status }}</span>
+                    {% elif task.status == 'In Progress' %}
+                    <span class="status-badge status-inprogress">{{ task.status }}</span>
+                    {% else %}
+                    <span class="status-badge status-pending">{{ task.status }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ task.deadline or '-' }}</td>
+                <td class="priority-{{ task.priority|lower }}">{{ task.priority }}</td>
+                <td>{{ task.notes or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- EOD Summary -->
+    {% if dashboard.stats %}
+    <h2 class="section-title">EOD SUMMARY</h2>
+    <div class="eod-summary">
+        <div class="eod-card">
+            <div class="eod-value">{{ dashboard.stats.total_assigned }}</div>
+            <div class="eod-label">Total Tasks Assigned</div>
+        </div>
+        <div class="eod-card">
+            <div class="eod-value green">{{ dashboard.stats.completed_today }}</div>
+            <div class="eod-label">Completed Today</div>
+        </div>
+        <div class="eod-card">
+            <div class="eod-value red">{{ dashboard.stats.pending_attention }}</div>
+            <div class="eod-label">Pending Attention</div>
+        </div>
+        <div class="eod-card">
+            <div class="eod-value yellow">{{ dashboard.stats.in_progress_count }}</div>
+            <div class="eod-label">In Progress</div>
+        </div>
+        <div class="eod-card">
+            <div class="eod-value red">{{ dashboard.stats.deadline_extended_count }}</div>
+            <div class="eod-label">Deadline Extended</div>
+        </div>
+        <div class="eod-card">
+            <div class="eod-value">{{ dashboard.stats.tasks_updated }}</div>
+            <div class="eod-label">Tasks Updated</div>
+        </div>
+        <div class="eod-card">
+            <div class="eod-value">{{ dashboard.stats.verified_by_admin }}</div>
+            <div class="eod-label">Verified by Admin</div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <span class="legend-dot dot-green"></span> GREEN = On Track
+        <span class="legend-dot dot-yellow"></span> YELLOW = Needs Attention
+        <span class="legend-dot dot-red"></span> RED = Overdue / Incomplete
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        Auto-generated | Confidential | For Internal Use Only<br>
+        --- Daily Progress Report ---
+    </div>
+</body>
+</html>
