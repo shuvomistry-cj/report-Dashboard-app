@@ -14,13 +14,33 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     print("Warning: Playwright not available. PDF export will be disabled.")
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dashboard-secret-key'
+# Try to import psycopg2 for PostgreSQL
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
 
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dashboard-secret-key')
+
+# Database configuration: PostgreSQL on Render (if DATABASE_URL exists), SQLite locally
+DATABASE_URL = os.environ.get('DATABASE_URL')
+USE_POSTGRES = DATABASE_URL is not None and PSYCOPG2_AVAILABLE
 DATABASE = 'dashboard.db'
 
+def get_db_connection():
+    """Get database connection - PostgreSQL on Render, SQLite locally"""
+    if USE_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.autocommit = False
+    else:
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+    return conn
+
 def init_db():
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     # Employees table
@@ -109,7 +129,7 @@ def index():
 # ============ EMPLOYEE APIs ============
 @app.route('/api/employees', methods=['GET', 'POST'])
 def employees():
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     if request.method == 'POST':
@@ -137,7 +157,7 @@ def employees():
 
 @app.route('/api/employees/<int:emp_id>', methods=['DELETE'])
 def delete_employee(emp_id):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('DELETE FROM employees WHERE id = ?', (emp_id,))
     conn.commit()
@@ -147,7 +167,7 @@ def delete_employee(emp_id):
 # ============ DAILY STATS APIs ============
 @app.route('/api/daily-stats/<date_str>', methods=['GET', 'POST', 'PUT'])
 def daily_stats(date_str):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     if request.method == 'POST' or request.method == 'PUT':
@@ -185,7 +205,7 @@ def daily_stats(date_str):
 # ============ EMPLOYEE DAILY STATS APIs ============
 @app.route('/api/employee-daily-stats/<date_str>')
 def employee_daily_stats(date_str):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('''SELECT eds.*, e.name, e.designation, e.initials, e.color 
                   FROM employee_daily_stats eds
@@ -207,7 +227,7 @@ def employee_daily_stats(date_str):
 @app.route('/api/employee-daily-stats', methods=['POST'])
 def save_employee_daily_stats():
     data = request.get_json()
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     for stat in data:
@@ -225,7 +245,7 @@ def save_employee_daily_stats():
 # ============ TASK APIs ============
 @app.route('/api/tasks', methods=['GET', 'POST'])
 def tasks():
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     if request.method == 'POST':
@@ -273,7 +293,7 @@ def tasks():
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT', 'DELETE'])
 def task_detail(task_id):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     if request.method == 'PUT':
@@ -298,7 +318,7 @@ def task_detail(task_id):
 @app.route('/api/tasks/<int:task_id>/update-status', methods=['PUT'])
 def update_task_status(task_id):
     data = request.get_json()
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('''UPDATE tasks SET status=?, deadline=?, verified=?, updated_at=CURRENT_TIMESTAMP
                  WHERE id=?''',
@@ -310,7 +330,7 @@ def update_task_status(task_id):
 # ============ DASHBOARD DATA API ============
 @app.route('/api/dashboard/<date_str>')
 def get_dashboard(date_str):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     # Get daily stats
@@ -409,7 +429,7 @@ def export_dashboard_bulk():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     c.execute('''SELECT * FROM daily_stats 
                   WHERE date BETWEEN ? AND ? 
@@ -478,7 +498,7 @@ def export_dashboard_bulk():
 @app.route('/api/dashboard-stats/<date_str>')
 def get_dashboard_stats(date_str):
     """Get auto-calculated statistics for dashboard creation"""
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     # Get total employees
@@ -541,7 +561,7 @@ def get_dashboard_stats(date_str):
 # ============ DASHBOARD EMPLOYEE STATUS APIs ============
 @app.route('/api/dashboard-employee-status/<date_str>', methods=['GET', 'POST'])
 def dashboard_employee_status(date_str):
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     if request.method == 'POST':
@@ -576,7 +596,7 @@ def dashboard_history():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     
-    conn = sqlite3.connect(DATABASE)
+    conn = get_db_connection()
     c = conn.cursor()
     
     if start_date and end_date:
