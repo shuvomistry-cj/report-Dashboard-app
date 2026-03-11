@@ -39,6 +39,13 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
     return conn
 
+def close_db_connection(conn):
+    """Safely close database connection"""
+    try:
+        conn.close()
+    except:
+        pass
+
 def get_placeholder():
     """Return the right placeholder syntax for the database"""
     return '%s' if USE_POSTGRES else '?'
@@ -217,7 +224,7 @@ def init_db():
         )''')
     
     conn.commit()
-    conn.close()
+    close_db_connection(conn)
 
 # Initialize database
 init_db()
@@ -247,13 +254,13 @@ def employees():
                      VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})'''),
                   (name, department, designation, employee_type, initials, color))
         conn.commit()
-        conn.close()
+        close_db_connection(conn)
         return jsonify({'success': True, 'message': 'Employee added successfully'})
     
     c.execute('SELECT * FROM employees ORDER BY name')
     employees = [{'id': row[0], 'name': row[1], 'department': row[2], 'designation': row[3], 
                   'employee_type': row[4], 'initials': row[5], 'color': row[6]} for row in c.fetchall()]
-    conn.close()
+    close_db_connection(conn)
     return jsonify(employees)
 
 @app.route('/api/employees/<int:emp_id>', methods=['DELETE'])
@@ -262,7 +269,7 @@ def delete_employee(emp_id):
     c = conn.cursor()
     c.execute(format_query('DELETE FROM employees WHERE id = ?'), (emp_id,))
     conn.commit()
-    conn.close()
+    close_db_connection(conn)
     return jsonify({'success': True})
 
 # ============ DAILY STATS APIs ============
@@ -283,15 +290,15 @@ def daily_stats(date_str):
                      data.get('verified_by_admin', 0))
             execute_insert_or_replace(c, 'daily_stats', columns, values, unique_column='date')
             conn.commit()
-            conn.close()
+            close_db_connection(conn)
             return jsonify({'success': True})
         except Exception as e:
-            conn.close()
+            close_db_connection(conn)
             return jsonify({'success': False, 'error': str(e)}), 500
     
     c.execute(format_query('SELECT * FROM daily_stats WHERE date = ?'), (date_str,))
     row = c.fetchone()
-    conn.close()
+    close_db_connection(conn)
     
     if row:
         return jsonify({
@@ -312,7 +319,7 @@ def employee_daily_stats(date_str):
                   JOIN employees e ON eds.employee_id = e.id
                   WHERE eds.date = ?'''), (date_str,))
     rows = c.fetchall()
-    conn.close()
+    close_db_connection(conn)
     
     stats = []
     for row in rows:
@@ -338,7 +345,7 @@ def save_employee_daily_stats():
         execute_insert_or_replace(c, 'employee_daily_stats', columns, values, unique_column='date, employee_id')
     
     conn.commit()
-    conn.close()
+    close_db_connection(conn)
     return jsonify({'success': True})
 
 # ============ TASK APIs ============
@@ -357,7 +364,7 @@ def tasks():
                    1 if data.get('verified') == 'Yes' else 0, data['date']))
         conn.commit()
         task_id = get_lastrowid(c)
-        conn.close()
+        close_db_connection(conn)
         return jsonify({'success': True, 'id': task_id})
     
     # GET with filters
@@ -378,7 +385,7 @@ def tasks():
                       ORDER BY t.created_at DESC'''), (date_filter,))
     
     rows = c.fetchall()
-    conn.close()
+    close_db_connection(conn)
     
     tasks_list = []
     for row in rows:
@@ -397,21 +404,25 @@ def task_detail(task_id):
     
     if request.method == 'PUT':
         data = request.get_json()
+        # Handle empty date/deadline for PostgreSQL
+        deadline = data.get('deadline') if data.get('deadline') else None
+        task_date = data.get('date') if data.get('date') else None
+        
         c.execute(format_query('''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
                     deadline=?, priority=?, notes=?, verified=?, date=?
                     WHERE id=?'''),
                   (data['employee_id'], data['task_name'], data.get('details', ''),
-                   data.get('status', 'Pending'), data.get('deadline', ''),
+                   data.get('status', 'Pending'), deadline,
                    data.get('priority', 'Medium'), data.get('notes', ''),
-                   1 if data.get('verified') == 'Yes' else 0, data['date'], task_id))
+                   1 if data.get('verified') == 'Yes' else 0, task_date, task_id))
         conn.commit()
-        conn.close()
+        close_db_connection(conn)
         return jsonify({'success': True})
     
     elif request.method == 'DELETE':
         c.execute(format_query('DELETE FROM tasks WHERE id = ?'), (task_id,))
         conn.commit()
-        conn.close()
+        close_db_connection(conn)
         return jsonify({'success': True})
 
 @app.route('/api/tasks/<int:task_id>/update-status', methods=['PUT'])
@@ -419,11 +430,13 @@ def update_task_status(task_id):
     data = request.get_json()
     conn = get_db_connection()
     c = conn.cursor()
+    # Handle empty deadline for PostgreSQL
+    deadline = data.get('deadline') if data.get('deadline') else None
     c.execute(format_query('''UPDATE tasks SET status=?, deadline=?, verified=?, updated_at=CURRENT_TIMESTAMP
                  WHERE id=?'''),
-              (data.get('status'), data.get('deadline'), 1 if data.get('verified') == 'Yes' else 0, task_id))
+              (data.get('status'), deadline, 1 if data.get('verified') == 'Yes' else 0, task_id))
     conn.commit()
-    conn.close()
+    close_db_connection(conn)
     return jsonify({'success': True})
 
 # ============ DASHBOARD DATA API ============
@@ -443,13 +456,15 @@ def get_dashboard(date_str):
     
     # Get employee stats with tasks (including deadline extended count)
     c.execute(format_query('''SELECT 
-                    eds.*, e.name, e.designation, e.initials, e.color,
+                    eds.id, eds.date, eds.employee_id, eds.assigned, eds.done, eds.pending, 
+                    eds.in_progress, eds.completion_rate, eds.task_updated, eds.verify_pending,
+                    e.name, e.designation, e.initials, e.color,
                     SUM(CASE WHEN t.status = 'Deadline Extended' THEN 1 ELSE 0 END) as deadline_extended
                   FROM employee_daily_stats eds
                   JOIN employees e ON eds.employee_id = e.id
                   LEFT JOIN tasks t ON e.id = t.employee_id AND t.date = ?
                   WHERE eds.date = ?
-                  GROUP BY eds.id'''), (date_str, date_str))
+                  GROUP BY eds.id, e.name, e.designation, e.initials, e.color'''), (date_str, date_str))
     emp_stats = c.fetchall()
     
     # Get pending, in-progress, and deadline extended tasks
@@ -464,7 +479,7 @@ def get_dashboard(date_str):
                   END'''), (date_str,))
     pending_tasks = c.fetchall()
     
-    conn.close()
+    close_db_connection(conn)
     
     dashboard = {
         'stats': None,
@@ -530,11 +545,11 @@ def export_dashboard_bulk():
     
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('''SELECT * FROM daily_stats 
+    c.execute(format_query('''SELECT * FROM daily_stats 
                   WHERE date BETWEEN ? AND ? 
-                  ORDER BY date DESC''', (start_date, end_date))
+                  ORDER BY date DESC'''), (start_date, end_date))
     rows = c.fetchall()
-    conn.close()
+    close_db_connection(conn)
     
     dashboards = []
     for row in rows:
@@ -644,7 +659,7 @@ def get_dashboard_stats(date_str):
             'completion_rate': completion_rate
         })
     
-    conn.close()
+    close_db_connection(conn)
     
     return jsonify({
         'total_people': total_people,
@@ -673,13 +688,13 @@ def dashboard_employee_status(date_str):
                         VALUES (?, ?, ?)'''),
                       (date_str, item['employee_id'], item['status']))
         conn.commit()
-        conn.close()
+        close_db_connection(conn)
         return jsonify({'success': True})
     
     # GET - return active and on leave employee lists
     c.execute(format_query('''SELECT employee_id, status FROM dashboard_employee_status WHERE date = ?'''), (date_str,))
     rows = c.fetchall()
-    conn.close()
+    close_db_connection(conn)
     
     active_employees = [row[0] for row in rows if row[1] == 'Active']
     on_leave_employees = [row[0] for row in rows if row[1] == 'On Leave']
@@ -706,7 +721,7 @@ def dashboard_history():
         c.execute('SELECT * FROM daily_stats ORDER BY date DESC')
     
     rows = c.fetchall()
-    conn.close()
+    close_db_connection(conn)
     
     history = []
     for row in rows:
@@ -726,7 +741,7 @@ def db_status():
         c = conn.cursor()
         c.execute("SELECT version()")
         version = c.fetchone()[0]
-        conn.close()
+        close_db_connection(conn)
         return jsonify({
             'connected': True,
             'database_type': 'PostgreSQL' if USE_POSTGRES else 'SQLite',
