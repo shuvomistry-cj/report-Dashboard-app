@@ -816,9 +816,9 @@ async function updateTask() {
         return;
     }
     
+    // Don't send date field to preserve original creation date
     const taskData = {
         employee_id: document.getElementById('edit-task-employee').value,
-        date: document.getElementById('edit-task-date').value,
         task_name: document.getElementById('edit-task-name').value.trim(),
         details: document.getElementById('edit-task-details').value.trim(),
         status: status,

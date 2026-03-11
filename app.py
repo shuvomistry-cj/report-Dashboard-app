@@ -32,7 +32,10 @@ DATABASE = 'dashboard.db'
 def get_db_connection():
     """Get database connection - PostgreSQL on Render, SQLite locally"""
     if USE_POSTGRES:
-        conn = psycopg2.connect(DATABASE_URL)
+        # Add connection pooling parameters for PostgreSQL
+        conn = psycopg2.connect(DATABASE_URL, 
+                              connect_timeout=10,
+                              application_name="dashboard_app")
         conn.autocommit = False
     else:
         conn = sqlite3.connect(DATABASE)
@@ -42,7 +45,8 @@ def get_db_connection():
 def close_db_connection(conn):
     """Safely close database connection"""
     try:
-        conn.close()
+        if conn and not conn.closed:
+            conn.close()
     except:
         pass
 
@@ -404,17 +408,22 @@ def task_detail(task_id):
     
     if request.method == 'PUT':
         data = request.get_json()
-        # Handle empty date/deadline for PostgreSQL
+        # Handle empty deadline for PostgreSQL
         deadline = data.get('deadline') if data.get('deadline') else None
-        task_date = data.get('date') if data.get('date') else None
         
+        # Get existing task to preserve original date
+        c.execute(format_query('SELECT date FROM tasks WHERE id = ?'), (task_id,))
+        existing_task = c.fetchone()
+        original_date = existing_task[0] if existing_task else date.today().isoformat()
+        
+        # Only update editable fields, preserve original date
         c.execute(format_query('''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
-                    deadline=?, priority=?, notes=?, verified=?, date=?
+                    deadline=?, priority=?, notes=?, verified=?, updated_at=CURRENT_TIMESTAMP
                     WHERE id=?'''),
                   (data['employee_id'], data['task_name'], data.get('details', ''),
                    data.get('status', 'Pending'), deadline,
                    data.get('priority', 'Medium'), data.get('notes', ''),
-                   1 if data.get('verified') == 'Yes' else 0, task_date, task_id))
+                   1 if data.get('verified') == 'Yes' else 0, task_id))
         conn.commit()
         close_db_connection(conn)
         return jsonify({'success': True})
