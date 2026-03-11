@@ -39,6 +39,39 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
     return conn
 
+def get_placeholder():
+    """Return the right placeholder syntax for the database"""
+    return '%s' if USE_POSTGRES else '?'
+
+def format_query(query):
+    """Convert ? placeholders to %s for PostgreSQL"""
+    if USE_POSTGRES:
+        return query.replace('?', '%s')
+    return query
+
+def execute_insert_or_replace(c, table, columns, values, unique_column='date'):
+    """Execute INSERT OR REPLACE for SQLite, INSERT ON CONFLICT for PostgreSQL"""
+    if USE_POSTGRES:
+        # PostgreSQL: INSERT ... ON CONFLICT DO UPDATE
+        placeholders = ', '.join(['%s'] * len(values))
+        col_list = ', '.join(columns)
+        updates = ', '.join([f"{col} = EXCLUDED.{col}" for col in columns if col != unique_column])
+        query = f"INSERT INTO {table} ({col_list}) VALUES ({placeholders}) ON CONFLICT ({unique_column}) DO UPDATE SET {updates}"
+        c.execute(query, values)
+    else:
+        # SQLite: INSERT OR REPLACE
+        placeholders = ', '.join(['?'] * len(values))
+        col_list = ', '.join(columns)
+        query = f"INSERT OR REPLACE INTO {table} ({col_list}) VALUES ({placeholders})"
+        c.execute(query, values)
+
+def get_lastrowid(c):
+    """Get last inserted row id"""
+    if USE_POSTGRES:
+        c.execute("SELECT LASTVAL()")
+        return c.fetchone()[0]
+    return c.lastrowid
+
 def init_db():
     conn = get_db_connection()
     c = conn.cursor()
@@ -209,8 +242,9 @@ def employees():
         colors = ['#3498db', '#9b59b6', '#2ecc71', '#f39c12', '#e74c3c', '#1abc9c', '#34495e', '#16a085']
         color = colors[hash(name) % len(colors)]
         
-        c.execute('''INSERT INTO employees (name, department, designation, employee_type, initials, color)
-                     VALUES (?, ?, ?, ?, ?, ?)''',
+        ph = get_placeholder()
+        c.execute(format_query(f'''INSERT INTO employees (name, department, designation, employee_type, initials, color)
+                     VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})'''),
                   (name, department, designation, employee_type, initials, color))
         conn.commit()
         conn.close()
@@ -226,7 +260,7 @@ def employees():
 def delete_employee(emp_id):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('DELETE FROM employees WHERE id = ?', (emp_id,))
+    c.execute(format_query('DELETE FROM employees WHERE id = ?'), (emp_id,))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
@@ -240,15 +274,14 @@ def daily_stats(date_str):
     if request.method == 'POST' or request.method == 'PUT':
         data = request.get_json()
         try:
-            c.execute('''INSERT OR REPLACE INTO daily_stats 
-                        (date, total_people, active_today, on_leave, tasks_closed, total_assigned,
-                         completed_today, pending_attention, in_progress_count, tasks_updated, verified_by_admin)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (date_str, data.get('total_people', 0), data.get('active_today', 0),
-                       data.get('on_leave', 0), data.get('tasks_closed', 0), data.get('total_assigned', 0),
-                       data.get('completed_today', 0), data.get('pending_attention', 0),
-                       data.get('in_progress_count', 0), data.get('tasks_updated', 0),
-                       data.get('verified_by_admin', 0)))
+            columns = ['date', 'total_people', 'active_today', 'on_leave', 'tasks_closed', 'total_assigned',
+                     'completed_today', 'pending_attention', 'in_progress_count', 'tasks_updated', 'verified_by_admin']
+            values = (date_str, data.get('total_people', 0), data.get('active_today', 0),
+                     data.get('on_leave', 0), data.get('tasks_closed', 0), data.get('total_assigned', 0),
+                     data.get('completed_today', 0), data.get('pending_attention', 0),
+                     data.get('in_progress_count', 0), data.get('tasks_updated', 0),
+                     data.get('verified_by_admin', 0))
+            execute_insert_or_replace(c, 'daily_stats', columns, values, unique_column='date')
             conn.commit()
             conn.close()
             return jsonify({'success': True})
@@ -256,7 +289,7 @@ def daily_stats(date_str):
             conn.close()
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    c.execute('SELECT * FROM daily_stats WHERE date = ?', (date_str,))
+    c.execute(format_query('SELECT * FROM daily_stats WHERE date = ?'), (date_str,))
     row = c.fetchone()
     conn.close()
     
@@ -274,10 +307,10 @@ def daily_stats(date_str):
 def employee_daily_stats(date_str):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('''SELECT eds.*, e.name, e.designation, e.initials, e.color 
+    c.execute(format_query('''SELECT eds.*, e.name, e.designation, e.initials, e.color 
                   FROM employee_daily_stats eds
                   JOIN employees e ON eds.employee_id = e.id
-                  WHERE eds.date = ?''', (date_str,))
+                  WHERE eds.date = ?'''), (date_str,))
     rows = c.fetchall()
     conn.close()
     
@@ -298,12 +331,11 @@ def save_employee_daily_stats():
     c = conn.cursor()
     
     for stat in data:
-        c.execute('''INSERT OR REPLACE INTO employee_daily_stats 
-                    (date, employee_id, assigned, done, pending, in_progress, completion_rate, task_updated, verify_pending)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (stat['date'], stat['employee_id'], stat['assigned'], stat['done'],
-                   stat['pending'], stat['in_progress'], stat['completion_rate'],
-                   stat.get('task_updated', 0), stat.get('verify_pending', 0)))
+        columns = ['date', 'employee_id', 'assigned', 'done', 'pending', 'in_progress', 'completion_rate', 'task_updated', 'verify_pending']
+        values = (stat['date'], stat['employee_id'], stat['assigned'], stat['done'],
+                 stat['pending'], stat['in_progress'], stat['completion_rate'],
+                 stat.get('task_updated', 0), stat.get('verify_pending', 0))
+        execute_insert_or_replace(c, 'employee_daily_stats', columns, values, unique_column='date, employee_id')
     
     conn.commit()
     conn.close()
@@ -317,14 +349,14 @@ def tasks():
     
     if request.method == 'POST':
         data = request.get_json()
-        c.execute('''INSERT INTO tasks (employee_id, task_name, details, status, deadline, priority, notes, verified, date)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        c.execute(format_query('''INSERT INTO tasks (employee_id, task_name, details, status, deadline, priority, notes, verified, date)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'''),
                   (data['employee_id'], data['task_name'], data.get('details', ''),
                    data.get('status', 'Pending'), data.get('deadline', ''),
                    data.get('priority', 'Medium'), data.get('notes', ''),
                    1 if data.get('verified') == 'Yes' else 0, data['date']))
         conn.commit()
-        task_id = c.lastrowid
+        task_id = get_lastrowid(c)
         conn.close()
         return jsonify({'success': True, 'id': task_id})
     
@@ -333,17 +365,17 @@ def tasks():
     emp_filter = request.args.get('employee_id')
     
     if emp_filter:
-        c.execute('''SELECT t.*, e.name as employee_name, e.designation 
+        c.execute(format_query('''SELECT t.*, e.name as employee_name, e.designation 
                       FROM tasks t 
                       JOIN employees e ON t.employee_id = e.id
                       WHERE t.date = ? AND t.employee_id = ? 
-                      ORDER BY t.created_at DESC''', (date_filter, emp_filter))
+                      ORDER BY t.created_at DESC'''), (date_filter, emp_filter))
     else:
-        c.execute('''SELECT t.*, e.name as employee_name, e.designation 
+        c.execute(format_query('''SELECT t.*, e.name as employee_name, e.designation 
                       FROM tasks t 
                       JOIN employees e ON t.employee_id = e.id
                       WHERE t.date = ? 
-                      ORDER BY t.created_at DESC''', (date_filter,))
+                      ORDER BY t.created_at DESC'''), (date_filter,))
     
     rows = c.fetchall()
     conn.close()
@@ -365,9 +397,9 @@ def task_detail(task_id):
     
     if request.method == 'PUT':
         data = request.get_json()
-        c.execute('''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
+        c.execute(format_query('''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
                     deadline=?, priority=?, notes=?, verified=?, date=?
-                    WHERE id=?''',
+                    WHERE id=?'''),
                   (data['employee_id'], data['task_name'], data.get('details', ''),
                    data.get('status', 'Pending'), data.get('deadline', ''),
                    data.get('priority', 'Medium'), data.get('notes', ''),
@@ -377,7 +409,7 @@ def task_detail(task_id):
         return jsonify({'success': True})
     
     elif request.method == 'DELETE':
-        c.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+        c.execute(format_query('DELETE FROM tasks WHERE id = ?'), (task_id,))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
@@ -387,8 +419,8 @@ def update_task_status(task_id):
     data = request.get_json()
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('''UPDATE tasks SET status=?, deadline=?, verified=?, updated_at=CURRENT_TIMESTAMP
-                 WHERE id=?''',
+    c.execute(format_query('''UPDATE tasks SET status=?, deadline=?, verified=?, updated_at=CURRENT_TIMESTAMP
+                 WHERE id=?'''),
               (data.get('status'), data.get('deadline'), 1 if data.get('verified') == 'Yes' else 0, task_id))
     conn.commit()
     conn.close()
@@ -401,27 +433,27 @@ def get_dashboard(date_str):
     c = conn.cursor()
     
     # Get daily stats
-    c.execute('SELECT * FROM daily_stats WHERE date = ?', (date_str,))
+    c.execute(format_query('SELECT * FROM daily_stats WHERE date = ?'), (date_str,))
     stats_row = c.fetchone()
     
     # Get task counts by status for deadline extended calculation
-    c.execute('''SELECT status, COUNT(*) FROM tasks WHERE date = ? GROUP BY status''', (date_str,))
+    c.execute(format_query('''SELECT status, COUNT(*) FROM tasks WHERE date = ? GROUP BY status'''), (date_str,))
     task_counts = {row[0]: row[1] for row in c.fetchall()}
     deadline_extended_count = task_counts.get('Deadline Extended', 0)
     
     # Get employee stats with tasks (including deadline extended count)
-    c.execute('''SELECT 
+    c.execute(format_query('''SELECT 
                     eds.*, e.name, e.designation, e.initials, e.color,
                     SUM(CASE WHEN t.status = 'Deadline Extended' THEN 1 ELSE 0 END) as deadline_extended
                   FROM employee_daily_stats eds
                   JOIN employees e ON eds.employee_id = e.id
                   LEFT JOIN tasks t ON e.id = t.employee_id AND t.date = ?
                   WHERE eds.date = ?
-                  GROUP BY eds.id''', (date_str, date_str))
+                  GROUP BY eds.id'''), (date_str, date_str))
     emp_stats = c.fetchall()
     
     # Get pending, in-progress, and deadline extended tasks
-    c.execute('''SELECT t.*, e.name as employee_name 
+    c.execute(format_query('''SELECT t.*, e.name as employee_name 
                   FROM tasks t 
                   JOIN employees e ON t.employee_id = e.id
                   WHERE t.date = ? AND t.status IN ('In Progress', 'Pending', 'Deadline Extended')
@@ -429,7 +461,7 @@ def get_dashboard(date_str):
                     WHEN 'High' THEN 1 
                     WHEN 'Medium' THEN 2 
                     WHEN 'Low' THEN 3 
-                  END''', (date_str,))
+                  END'''), (date_str,))
     pending_tasks = c.fetchall()
     
     conn.close()
@@ -573,7 +605,7 @@ def get_dashboard_stats(date_str):
     total_people = c.fetchone()[0]
     
     # Get task counts by status for the date
-    c.execute('''SELECT status, COUNT(*) FROM tasks WHERE date = ? GROUP BY status''', (date_str,))
+    c.execute(format_query('''SELECT status, COUNT(*) FROM tasks WHERE date = ? GROUP BY status'''), (date_str,))
     task_counts = {row[0]: row[1] for row in c.fetchall()}
     
     total_assigned = sum(task_counts.values())
@@ -584,7 +616,7 @@ def get_dashboard_stats(date_str):
     tasks_closed = completed_today  # Tasks marked as done are considered closed
     
     # Get employee task breakdown
-    c.execute('''SELECT 
+    c.execute(format_query('''SELECT 
                     e.id, e.name, e.designation, e.initials, e.color,
                     COUNT(t.id) as assigned,
                     SUM(CASE WHEN t.status = 'Done' THEN 1 ELSE 0 END) as done,
@@ -592,7 +624,7 @@ def get_dashboard_stats(date_str):
                     SUM(CASE WHEN t.status = 'In Progress' THEN 1 ELSE 0 END) as in_progress
                  FROM employees e
                  LEFT JOIN tasks t ON e.id = t.employee_id AND t.date = ?
-                 GROUP BY e.id''', (date_str,))
+                 GROUP BY e.id'''), (date_str,))
     
     employee_stats = []
     for row in c.fetchall():
@@ -634,18 +666,18 @@ def dashboard_employee_status(date_str):
     if request.method == 'POST':
         data = request.get_json()
         # Clear existing status for this date
-        c.execute('DELETE FROM dashboard_employee_status WHERE date = ?', (date_str,))
+        c.execute(format_query('DELETE FROM dashboard_employee_status WHERE date = ?'), (date_str,))
         # Insert new status
         for item in data:
-            c.execute('''INSERT INTO dashboard_employee_status (date, employee_id, status)
-                        VALUES (?, ?, ?)''',
+            c.execute(format_query('''INSERT INTO dashboard_employee_status (date, employee_id, status)
+                        VALUES (?, ?, ?)'''),
                       (date_str, item['employee_id'], item['status']))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
     
     # GET - return active and on leave employee lists
-    c.execute('''SELECT employee_id, status FROM dashboard_employee_status WHERE date = ?''', (date_str,))
+    c.execute(format_query('''SELECT employee_id, status FROM dashboard_employee_status WHERE date = ?'''), (date_str,))
     rows = c.fetchall()
     conn.close()
     
@@ -667,9 +699,9 @@ def dashboard_history():
     c = conn.cursor()
     
     if start_date and end_date:
-        c.execute('''SELECT * FROM daily_stats 
+        c.execute(format_query('''SELECT * FROM daily_stats 
                       WHERE date BETWEEN ? AND ? 
-                      ORDER BY date DESC''', (start_date, end_date))
+                      ORDER BY date DESC'''), (start_date, end_date))
     else:
         c.execute('SELECT * FROM daily_stats ORDER BY date DESC')
     
