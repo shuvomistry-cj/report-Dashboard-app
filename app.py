@@ -4,6 +4,7 @@ from datetime import datetime, date
 import sqlite3
 import os
 import json
+import time
 from io import BytesIO
 
 # Try to import Playwright for PDF export
@@ -17,6 +18,7 @@ except ImportError:
 # Try to import psycopg2 for PostgreSQL
 try:
     import psycopg2
+    import psycopg2.extras
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -34,8 +36,9 @@ def get_db_connection():
     if USE_POSTGRES:
         # Add connection pooling parameters for PostgreSQL
         conn = psycopg2.connect(DATABASE_URL, 
-                              connect_timeout=10,
-                              application_name="dashboard_app")
+                              connect_timeout=5,
+                              application_name="dashboard_app",
+                              cursor_factory=psycopg2.extras.RealDictCursor)
         conn.autocommit = False
     else:
         conn = sqlite3.connect(DATABASE)
@@ -49,6 +52,23 @@ def close_db_connection(conn):
             conn.close()
     except:
         pass
+
+def execute_with_retry(conn, query, params=None, max_retries=3):
+    """Execute SQL query with retry logic for connection pool issues"""
+    for attempt in range(max_retries):
+        try:
+            c = conn.cursor()
+            if params:
+                c.execute(format_query(query), params)
+            else:
+                c.execute(format_query(query))
+            return c
+        except psycopg2.OperationalError as e:
+            if "max clients reached" in str(e).lower() and attempt < max_retries - 1:
+                time.sleep(0.5)  # Wait 500ms before retry
+                continue
+            raise e
+    return None
 
 def get_placeholder():
     """Return the right placeholder syntax for the database"""
@@ -412,18 +432,25 @@ def task_detail(task_id):
         deadline = data.get('deadline') if data.get('deadline') else None
         
         # Get existing task to preserve original date
-        c.execute(format_query('SELECT date FROM tasks WHERE id = ?'), (task_id,))
+        c = execute_with_retry(conn, 'SELECT date FROM tasks WHERE id = ?', (task_id,))
+        if not c:
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Task not found'}), 404
         existing_task = c.fetchone()
-        original_date = existing_task[0] if existing_task else date.today().isoformat()
+        original_date = existing_task['date'] if USE_POSTGRES else existing_task[0]
         
         # Only update editable fields, preserve original date
-        c.execute(format_query('''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
+        c = execute_with_retry(conn, '''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
                     deadline=?, priority=?, notes=?, verified=?, updated_at=CURRENT_TIMESTAMP
-                    WHERE id=?'''),
+                    WHERE id=?''', 
                   (data['employee_id'], data['task_name'], data.get('details', ''),
                    data.get('status', 'Pending'), deadline,
                    data.get('priority', 'Medium'), data.get('notes', ''),
                    1 if data.get('verified') == 'Yes' else 0, task_id))
+        if not c:
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Database connection error'}), 500
+            
         conn.commit()
         close_db_connection(conn)
         return jsonify({'success': True})
