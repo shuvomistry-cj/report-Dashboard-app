@@ -18,7 +18,6 @@ except ImportError:
 # Try to import psycopg2 for PostgreSQL
 try:
     import psycopg2
-    import psycopg2.extras
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -31,19 +30,27 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 USE_POSTGRES = DATABASE_URL is not None and PSYCOPG2_AVAILABLE
 DATABASE = 'dashboard.db'
 
-def get_db_connection():
-    """Get database connection - PostgreSQL on Render, SQLite locally"""
+def get_db_connection(max_retries=5, retry_delay=1):
+    """Get database connection - PostgreSQL on Render, SQLite locally
+    Includes retry logic for connection pool exhaustion at startup"""
     if USE_POSTGRES:
-        # Add connection pooling parameters for PostgreSQL
-        conn = psycopg2.connect(DATABASE_URL, 
-                              connect_timeout=5,
-                              application_name="dashboard_app",
-                              cursor_factory=psycopg2.extras.RealDictCursor)
-        conn.autocommit = False
+        for attempt in range(max_retries):
+            try:
+                conn = psycopg2.connect(DATABASE_URL, 
+                                      connect_timeout=5,
+                                      application_name="dashboard_app")
+                conn.autocommit = False
+                return conn
+            except psycopg2.OperationalError as e:
+                if "max clients reached" in str(e).lower() and attempt < max_retries - 1:
+                    print(f"Connection pool exhausted, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    continue
+                raise e
     else:
         conn = sqlite3.connect(DATABASE)
         conn.row_factory = sqlite3.Row
-    return conn
+        return conn
 
 def close_db_connection(conn):
     """Safely close database connection"""
@@ -52,23 +59,6 @@ def close_db_connection(conn):
             conn.close()
     except:
         pass
-
-def execute_with_retry(conn, query, params=None, max_retries=3):
-    """Execute SQL query with retry logic for connection pool issues"""
-    for attempt in range(max_retries):
-        try:
-            c = conn.cursor()
-            if params:
-                c.execute(format_query(query), params)
-            else:
-                c.execute(format_query(query))
-            return c
-        except psycopg2.OperationalError as e:
-            if "max clients reached" in str(e).lower() and attempt < max_retries - 1:
-                time.sleep(0.5)  # Wait 500ms before retry
-                continue
-            raise e
-    return None
 
 def get_placeholder():
     """Return the right placeholder syntax for the database"""
@@ -104,151 +94,165 @@ def get_lastrowid(c):
     return c.lastrowid
 
 def init_db():
-    conn = get_db_connection()
-    c = conn.cursor()
-    
-    # Use appropriate syntax for PostgreSQL vs SQLite
-    if USE_POSTGRES:
-        # PostgreSQL syntax
-        c.execute('''CREATE TABLE IF NOT EXISTS employees (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            department TEXT NOT NULL,
-            designation TEXT NOT NULL,
-            employee_type TEXT NOT NULL,
-            initials TEXT NOT NULL,
-            color TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
-            id SERIAL PRIMARY KEY,
-            date DATE UNIQUE NOT NULL,
-            total_people INTEGER DEFAULT 0,
-            active_today INTEGER DEFAULT 0,
-            on_leave INTEGER DEFAULT 0,
-            tasks_closed INTEGER DEFAULT 0,
-            total_assigned INTEGER DEFAULT 0,
-            completed_today INTEGER DEFAULT 0,
-            pending_attention INTEGER DEFAULT 0,
-            in_progress_count INTEGER DEFAULT 0,
-            tasks_updated INTEGER DEFAULT 0,
-            verified_by_admin INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
-            id SERIAL PRIMARY KEY,
-            date DATE NOT NULL,
-            employee_id INTEGER NOT NULL,
-            assigned INTEGER DEFAULT 0,
-            done INTEGER DEFAULT 0,
-            pending INTEGER DEFAULT 0,
-            in_progress INTEGER DEFAULT 0,
-            completion_rate INTEGER DEFAULT 0,
-            task_updated INTEGER DEFAULT 0,
-            verify_pending INTEGER DEFAULT 0,
-            FOREIGN KEY (employee_id) REFERENCES employees (id),
-            UNIQUE(date, employee_id)
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS tasks (
-            id SERIAL PRIMARY KEY,
-            employee_id INTEGER NOT NULL,
-            task_name TEXT NOT NULL,
-            details TEXT,
-            status TEXT NOT NULL DEFAULT 'Pending',
-            deadline TEXT,
-            priority TEXT DEFAULT 'Medium',
-            notes TEXT,
-            verified INTEGER DEFAULT 0,
-            date DATE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees (id)
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
-            id SERIAL PRIMARY KEY,
-            date DATE NOT NULL,
-            employee_id INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            FOREIGN KEY (employee_id) REFERENCES employees (id),
-            UNIQUE(date, employee_id, status)
-        )''')
-    else:
-        # SQLite syntax
-        c.execute('''CREATE TABLE IF NOT EXISTS employees (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            department TEXT NOT NULL,
-            designation TEXT NOT NULL,
-            employee_type TEXT NOT NULL,
-            initials TEXT NOT NULL,
-            color TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date DATE UNIQUE NOT NULL,
-            total_people INTEGER DEFAULT 0,
-            active_today INTEGER DEFAULT 0,
-            on_leave INTEGER DEFAULT 0,
-            tasks_closed INTEGER DEFAULT 0,
-            total_assigned INTEGER DEFAULT 0,
-            completed_today INTEGER DEFAULT 0,
-            pending_attention INTEGER DEFAULT 0,
-            in_progress_count INTEGER DEFAULT 0,
-            tasks_updated INTEGER DEFAULT 0,
-            verified_by_admin INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date DATE NOT NULL,
-            employee_id INTEGER NOT NULL,
-            assigned INTEGER DEFAULT 0,
-            done INTEGER DEFAULT 0,
-            pending INTEGER DEFAULT 0,
-            in_progress INTEGER DEFAULT 0,
-            completion_rate INTEGER DEFAULT 0,
-            task_updated INTEGER DEFAULT 0,
-            verify_pending INTEGER DEFAULT 0,
-            FOREIGN KEY (employee_id) REFERENCES employees (id),
-            UNIQUE(date, employee_id)
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            employee_id INTEGER NOT NULL,
-            task_name TEXT NOT NULL,
-            details TEXT,
-            status TEXT NOT NULL DEFAULT 'Pending',
-            deadline TEXT,
-            priority TEXT DEFAULT 'Medium',
-            notes TEXT,
-            verified INTEGER DEFAULT 0,
-            date DATE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (employee_id) REFERENCES employees (id)
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date DATE NOT NULL,
-            employee_id INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            FOREIGN KEY (employee_id) REFERENCES employees (id),
-            UNIQUE(date, employee_id, status)
-        )''')
-    
-    conn.commit()
-    close_db_connection(conn)
+    """Initialize database tables - with retry for connection pool issues"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            conn = get_db_connection()
+            c = conn.cursor()
+            
+            # Use appropriate syntax for PostgreSQL vs SQLite
+            if USE_POSTGRES:
+                # PostgreSQL syntax
+                c.execute('''CREATE TABLE IF NOT EXISTS employees (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    department TEXT NOT NULL,
+                    designation TEXT NOT NULL,
+                    employee_type TEXT NOT NULL,
+                    initials TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
+                    id SERIAL PRIMARY KEY,
+                    date DATE UNIQUE NOT NULL,
+                    total_people INTEGER DEFAULT 0,
+                    active_today INTEGER DEFAULT 0,
+                    on_leave INTEGER DEFAULT 0,
+                    tasks_closed INTEGER DEFAULT 0,
+                    total_assigned INTEGER DEFAULT 0,
+                    completed_today INTEGER DEFAULT 0,
+                    pending_attention INTEGER DEFAULT 0,
+                    in_progress_count INTEGER DEFAULT 0,
+                    tasks_updated INTEGER DEFAULT 0,
+                    verified_by_admin INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
+                    id SERIAL PRIMARY KEY,
+                    date DATE NOT NULL,
+                    employee_id INTEGER NOT NULL,
+                    assigned INTEGER DEFAULT 0,
+                    done INTEGER DEFAULT 0,
+                    pending INTEGER DEFAULT 0,
+                    in_progress INTEGER DEFAULT 0,
+                    completion_rate INTEGER DEFAULT 0,
+                    task_updated INTEGER DEFAULT 0,
+                    verify_pending INTEGER DEFAULT 0,
+                    FOREIGN KEY (employee_id) REFERENCES employees (id),
+                    UNIQUE(date, employee_id)
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS tasks (
+                    id SERIAL PRIMARY KEY,
+                    employee_id INTEGER NOT NULL,
+                    task_name TEXT NOT NULL,
+                    details TEXT,
+                    status TEXT NOT NULL DEFAULT 'Pending',
+                    deadline TEXT,
+                    priority TEXT DEFAULT 'Medium',
+                    notes TEXT,
+                    verified INTEGER DEFAULT 0,
+                    date DATE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees (id)
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
+                    id SERIAL PRIMARY KEY,
+                    date DATE NOT NULL,
+                    employee_id INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    FOREIGN KEY (employee_id) REFERENCES employees (id),
+                    UNIQUE(date, employee_id, status)
+                )''')
+            else:
+                # SQLite syntax
+                c.execute('''CREATE TABLE IF NOT EXISTS employees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    department TEXT NOT NULL,
+                    designation TEXT NOT NULL,
+                    employee_type TEXT NOT NULL,
+                    initials TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date DATE UNIQUE NOT NULL,
+                    total_people INTEGER DEFAULT 0,
+                    active_today INTEGER DEFAULT 0,
+                    on_leave INTEGER DEFAULT 0,
+                    tasks_closed INTEGER DEFAULT 0,
+                    total_assigned INTEGER DEFAULT 0,
+                    completed_today INTEGER DEFAULT 0,
+                    pending_attention INTEGER DEFAULT 0,
+                    in_progress_count INTEGER DEFAULT 0,
+                    tasks_updated INTEGER DEFAULT 0,
+                    verified_by_admin INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date DATE NOT NULL,
+                    employee_id INTEGER NOT NULL,
+                    assigned INTEGER DEFAULT 0,
+                    done INTEGER DEFAULT 0,
+                    pending INTEGER DEFAULT 0,
+                    in_progress INTEGER DEFAULT 0,
+                    completion_rate INTEGER DEFAULT 0,
+                    task_updated INTEGER DEFAULT 0,
+                    verify_pending INTEGER DEFAULT 0,
+                    FOREIGN KEY (employee_id) REFERENCES employees (id),
+                    UNIQUE(date, employee_id)
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    employee_id INTEGER NOT NULL,
+                    task_name TEXT NOT NULL,
+                    details TEXT,
+                    status TEXT NOT NULL DEFAULT 'Pending',
+                    deadline TEXT,
+                    priority TEXT DEFAULT 'Medium',
+                    notes TEXT,
+                    verified INTEGER DEFAULT 0,
+                    date DATE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees (id)
+                )''')
+                
+                c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date DATE NOT NULL,
+                    employee_id INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    FOREIGN KEY (employee_id) REFERENCES employees (id),
+                    UNIQUE(date, employee_id, status)
+                )''')
+            
+            conn.commit()
+            close_db_connection(conn)
+            print("Database initialized successfully")
+            return True
+        except psycopg2.OperationalError as e:
+            if "max clients reached" in str(e).lower() and attempt < max_retries - 1:
+                print(f"Database init retry {attempt + 1}/{max_retries}...")
+                time.sleep(2)
+                continue
+            print(f"Database initialization failed: {e}")
+            return False
+    return False
 
 # Initialize database
 init_db()
@@ -431,26 +435,14 @@ def task_detail(task_id):
         # Handle empty deadline for PostgreSQL
         deadline = data.get('deadline') if data.get('deadline') else None
         
-        # Get existing task to preserve original date
-        c = execute_with_retry(conn, 'SELECT date FROM tasks WHERE id = ?', (task_id,))
-        if not c:
-            close_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Task not found'}), 404
-        existing_task = c.fetchone()
-        original_date = existing_task['date'] if USE_POSTGRES else existing_task[0]
-        
-        # Only update editable fields, preserve original date
-        c = execute_with_retry(conn, '''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
+        # Only update editable fields, preserve original date (don't update date field)
+        c.execute(format_query('''UPDATE tasks SET employee_id=?, task_name=?, details=?, status=?, 
                     deadline=?, priority=?, notes=?, verified=?, updated_at=CURRENT_TIMESTAMP
-                    WHERE id=?''', 
+                    WHERE id=?'''),
                   (data['employee_id'], data['task_name'], data.get('details', ''),
                    data.get('status', 'Pending'), deadline,
                    data.get('priority', 'Medium'), data.get('notes', ''),
                    1 if data.get('verified') == 'Yes' else 0, task_id))
-        if not c:
-            close_db_connection(conn)
-            return jsonify({'success': False, 'error': 'Database connection error'}), 500
-            
         conn.commit()
         close_db_connection(conn)
         return jsonify({'success': True})
