@@ -43,78 +43,145 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Employees table
-    c.execute('''CREATE TABLE IF NOT EXISTS employees (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        department TEXT NOT NULL,
-        designation TEXT NOT NULL,
-        employee_type TEXT NOT NULL,
-        initials TEXT NOT NULL,
-        color TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # Daily Dashboard Stats table
-    c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date DATE UNIQUE NOT NULL,
-        total_people INTEGER DEFAULT 0,
-        active_today INTEGER DEFAULT 0,
-        on_leave INTEGER DEFAULT 0,
-        tasks_closed INTEGER DEFAULT 0,
-        total_assigned INTEGER DEFAULT 0,
-        completed_today INTEGER DEFAULT 0,
-        pending_attention INTEGER DEFAULT 0,
-        in_progress_count INTEGER DEFAULT 0,
-        tasks_updated INTEGER DEFAULT 0,
-        verified_by_admin INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # Employee Daily Stats table (for task breakdown)
-    c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date DATE NOT NULL,
-        employee_id INTEGER NOT NULL,
-        assigned INTEGER DEFAULT 0,
-        done INTEGER DEFAULT 0,
-        pending INTEGER DEFAULT 0,
-        in_progress INTEGER DEFAULT 0,
-        completion_rate INTEGER DEFAULT 0,
-        task_updated INTEGER DEFAULT 0,
-        verify_pending INTEGER DEFAULT 0,
-        FOREIGN KEY (employee_id) REFERENCES employees (id),
-        UNIQUE(date, employee_id)
-    )''')
-    
-    # Tasks table
-    c.execute('''CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        employee_id INTEGER NOT NULL,
-        task_name TEXT NOT NULL,
-        details TEXT,
-        status TEXT NOT NULL DEFAULT 'Pending',
-        deadline TEXT,
-        priority TEXT DEFAULT 'Medium',
-        notes TEXT,
-        verified INTEGER DEFAULT 0,
-        date DATE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (employee_id) REFERENCES employees (id)
-    )''')
-    
-    # Dashboard employee status (Active/On Leave per date)
-    c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date DATE NOT NULL,
-        employee_id INTEGER NOT NULL,
-        status TEXT NOT NULL, -- 'Active' or 'On Leave'
-        FOREIGN KEY (employee_id) REFERENCES employees (id),
-        UNIQUE(date, employee_id, status)
-    )''')
+    # Use appropriate syntax for PostgreSQL vs SQLite
+    if USE_POSTGRES:
+        # PostgreSQL syntax
+        c.execute('''CREATE TABLE IF NOT EXISTS employees (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            department TEXT NOT NULL,
+            designation TEXT NOT NULL,
+            employee_type TEXT NOT NULL,
+            initials TEXT NOT NULL,
+            color TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
+            id SERIAL PRIMARY KEY,
+            date DATE UNIQUE NOT NULL,
+            total_people INTEGER DEFAULT 0,
+            active_today INTEGER DEFAULT 0,
+            on_leave INTEGER DEFAULT 0,
+            tasks_closed INTEGER DEFAULT 0,
+            total_assigned INTEGER DEFAULT 0,
+            completed_today INTEGER DEFAULT 0,
+            pending_attention INTEGER DEFAULT 0,
+            in_progress_count INTEGER DEFAULT 0,
+            tasks_updated INTEGER DEFAULT 0,
+            verified_by_admin INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
+            id SERIAL PRIMARY KEY,
+            date DATE NOT NULL,
+            employee_id INTEGER NOT NULL,
+            assigned INTEGER DEFAULT 0,
+            done INTEGER DEFAULT 0,
+            pending INTEGER DEFAULT 0,
+            in_progress INTEGER DEFAULT 0,
+            completion_rate INTEGER DEFAULT 0,
+            task_updated INTEGER DEFAULT 0,
+            verify_pending INTEGER DEFAULT 0,
+            FOREIGN KEY (employee_id) REFERENCES employees (id),
+            UNIQUE(date, employee_id)
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS tasks (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER NOT NULL,
+            task_name TEXT NOT NULL,
+            details TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            deadline TEXT,
+            priority TEXT DEFAULT 'Medium',
+            notes TEXT,
+            verified INTEGER DEFAULT 0,
+            date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees (id)
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
+            id SERIAL PRIMARY KEY,
+            date DATE NOT NULL,
+            employee_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            FOREIGN KEY (employee_id) REFERENCES employees (id),
+            UNIQUE(date, employee_id, status)
+        )''')
+    else:
+        # SQLite syntax
+        c.execute('''CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            department TEXT NOT NULL,
+            designation TEXT NOT NULL,
+            employee_type TEXT NOT NULL,
+            initials TEXT NOT NULL,
+            color TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS daily_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date DATE UNIQUE NOT NULL,
+            total_people INTEGER DEFAULT 0,
+            active_today INTEGER DEFAULT 0,
+            on_leave INTEGER DEFAULT 0,
+            tasks_closed INTEGER DEFAULT 0,
+            total_assigned INTEGER DEFAULT 0,
+            completed_today INTEGER DEFAULT 0,
+            pending_attention INTEGER DEFAULT 0,
+            in_progress_count INTEGER DEFAULT 0,
+            tasks_updated INTEGER DEFAULT 0,
+            verified_by_admin INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS employee_daily_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date DATE NOT NULL,
+            employee_id INTEGER NOT NULL,
+            assigned INTEGER DEFAULT 0,
+            done INTEGER DEFAULT 0,
+            pending INTEGER DEFAULT 0,
+            in_progress INTEGER DEFAULT 0,
+            completion_rate INTEGER DEFAULT 0,
+            task_updated INTEGER DEFAULT 0,
+            verify_pending INTEGER DEFAULT 0,
+            FOREIGN KEY (employee_id) REFERENCES employees (id),
+            UNIQUE(date, employee_id)
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            task_name TEXT NOT NULL,
+            details TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            deadline TEXT,
+            priority TEXT DEFAULT 'Medium',
+            notes TEXT,
+            verified INTEGER DEFAULT 0,
+            date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees (id)
+        )''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS dashboard_employee_status (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date DATE NOT NULL,
+            employee_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            FOREIGN KEY (employee_id) REFERENCES employees (id),
+            UNIQUE(date, employee_id, status)
+        )''')
     
     conn.commit()
     conn.close()
@@ -618,6 +685,26 @@ def dashboard_history():
             'tasks_updated': row[10], 'verified_by_admin': row[11]
         })
     return jsonify(history)
+
+@app.route('/api/debug/db-status')
+def db_status():
+    """Debug endpoint to check database connection"""
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("SELECT version()")
+        version = c.fetchone()[0]
+        conn.close()
+        return jsonify({
+            'connected': True,
+            'database_type': 'PostgreSQL' if USE_POSTGRES else 'SQLite',
+            'version': version
+        })
+    except Exception as e:
+        return jsonify({
+            'connected': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5001)
