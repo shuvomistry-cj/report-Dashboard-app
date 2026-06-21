@@ -57,6 +57,7 @@ function initializeDatePickers() {
     document.getElementById('create-date').value = today;
     document.getElementById('task-date').value = today;
     document.getElementById('task-filter-date').value = today;
+    addTaskRow();
     
     // Set header date
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -211,7 +212,9 @@ function updateEmployeeList() {
             <td>${emp.department}</td>
             <td>${emp.designation}</td>
             <td>${emp.employee_type}</td>
+            <td><span class="employee-status status-${emp.status.toLowerCase()}">${emp.status}</span></td>
             <td class="actions">
+                <button class="btn-small btn-edit" onclick="editEmployee(${emp.id})">Edit</button>
                 <button class="btn-small btn-delete" onclick="deleteEmployee(${emp.id})">Delete</button>
             </td>
         `;
@@ -227,10 +230,13 @@ function updateEmployeeSelects() {
         if (select) {
             const currentValue = select.value;
             select.innerHTML = selectId.includes('filter') ? '<option value="">All Employees</option>' : '<option value="">Select Employee</option>';
-            employees.forEach(emp => {
+            const availableEmployees = selectId === 'task-filter-employee'
+                ? employees
+                : employees.filter(emp => emp.status === 'Active');
+            availableEmployees.forEach(emp => {
                 const option = document.createElement('option');
                 option.value = emp.id;
-                option.textContent = `${emp.name} - ${emp.designation}`;
+                option.textContent = `${emp.name} - ${emp.designation}${emp.status === 'Left' ? ' [Left]' : ''}`;
                 select.appendChild(option);
             });
             if (currentValue) select.value = currentValue;
@@ -253,7 +259,7 @@ async function addEmployee() {
         const response = await fetch('/api/employees', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, department, designation, employee_type: type })
+            body: JSON.stringify({ name, department, designation, employee_type: type, status: 'Active' })
         });
         
         const data = await response.json();
@@ -272,17 +278,66 @@ async function addEmployee() {
     }
 }
 
+function editEmployee(id) {
+    const employee = employees.find(emp => emp.id === id);
+    if (!employee) return;
+
+    document.getElementById('edit-employee-id').value = employee.id;
+    document.getElementById('edit-employee-name').value = employee.name;
+    document.getElementById('edit-employee-department').value = employee.department;
+    document.getElementById('edit-employee-designation').value = employee.designation;
+    document.getElementById('edit-employee-type').value = employee.employee_type;
+    document.getElementById('edit-employee-status').value = employee.status;
+    document.getElementById('edit-employee-modal').style.display = 'flex';
+}
+
+async function updateEmployee() {
+    const id = document.getElementById('edit-employee-id').value;
+    const employeeData = {
+        name: document.getElementById('edit-employee-name').value.trim(),
+        department: document.getElementById('edit-employee-department').value.trim(),
+        designation: document.getElementById('edit-employee-designation').value.trim(),
+        employee_type: document.getElementById('edit-employee-type').value,
+        status: document.getElementById('edit-employee-status').value
+    };
+
+    if (!employeeData.name || !employeeData.department || !employeeData.designation || !employeeData.employee_type) {
+        showMessage('edit-employee-message', 'Please fill all required fields', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/employees/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(employeeData)
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to update employee');
+        }
+        document.getElementById('edit-employee-modal').style.display = 'none';
+        showMessage('employee-message', 'Employee updated successfully!', 'success');
+        await loadEmployees();
+    } catch (error) {
+        showMessage('edit-employee-message', error.message, 'error');
+    }
+}
+
 async function deleteEmployee(id) {
-    if (!confirm('Are you sure you want to delete this employee?')) return;
+    const employee = employees.find(emp => emp.id === id);
+    const employeeName = employee ? employee.name : 'this employee';
+    if (!confirm(`Delete ${employeeName}? Their tasks and saved employee status records will also be deleted.`)) return;
     
     try {
         const response = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
         const data = await response.json();
-        if (data.success) {
-            loadEmployees();
-        }
+        if (!response.ok || !data.success) throw new Error(data.error || 'Failed to delete employee');
+        showMessage('employee-message', 'Employee deleted successfully', 'success');
+        await loadEmployees();
     } catch (error) {
         console.error('Error deleting employee:', error);
+        showMessage('employee-message', error.message, 'error');
     }
 }
 
@@ -336,7 +391,7 @@ function updateEmployeeDropdowns() {
     activeSelect.innerHTML = '';
     onLeaveSelect.innerHTML = '';
     
-    employees.forEach(emp => {
+    employees.filter(emp => emp.status === 'Active').forEach(emp => {
         const activeOption = document.createElement('option');
         activeOption.value = emp.id;
         activeOption.textContent = `${emp.name} - ${emp.designation}`;
@@ -434,8 +489,15 @@ async function saveDashboard() {
     const activeSelect = document.getElementById('active-employees');
     const onLeaveSelect = document.getElementById('onleave-employees');
     
-    const selectedActive = Array.from(activeSelect.selectedOptions).map(o => parseInt(o.value)).filter(v => v);
-    const selectedOnLeave = Array.from(onLeaveSelect.selectedOptions).map(o => parseInt(o.value)).filter(v => v);
+    const activeEmployeeIds = new Set(
+        employees.filter(emp => emp.status === 'Active').map(emp => emp.id)
+    );
+    const selectedActive = Array.from(activeSelect.selectedOptions)
+        .map(o => parseInt(o.value))
+        .filter(id => activeEmployeeIds.has(id));
+    const selectedOnLeave = Array.from(onLeaveSelect.selectedOptions)
+        .map(o => parseInt(o.value))
+        .filter(id => activeEmployeeIds.has(id));
     
     // Validate no overlap
     const overlap = selectedActive.filter(id => selectedOnLeave.includes(id));
@@ -493,38 +555,37 @@ async function saveDashboard() {
     };
     
     try {
+        const postJson = async (url, body, label) => {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            let result;
+            try {
+                result = await response.json();
+            } catch (error) {
+                throw new Error(`${label} could not be saved`);
+            }
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || `${label} could not be saved`);
+            }
+            return result;
+        };
+
         // Save daily stats
-        const statsResponse = await fetch(`/api/daily-stats/${date}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(stats)
-        });
+        await postJson(`/api/daily-stats/${date}`, stats, 'Dashboard summary');
         
         // Save employee stats
-        const empResponse = await fetch('/api/employee-daily-stats', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(empStats)
-        });
+        await postJson('/api/employee-daily-stats', empStats, 'Employee breakdown');
         
         // Save employee status (Active/On Leave)
-        const statusResponse = await fetch(`/api/dashboard-employee-status/${date}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(employeeStatus)
-        });
-        
-        const statsData = await statsResponse.json();
-        const empData = await empResponse.json();
-        const statusData = await statusResponse.json();
-        
-        if (statsData.success && empData.success && statusData.success) {
-            showMessage('dashboard-message', 'Dashboard saved successfully!', 'success');
-        } else {
-            showMessage('dashboard-message', 'Error saving dashboard', 'error');
-        }
+        await postJson(`/api/dashboard-employee-status/${date}`, employeeStatus, 'Attendance');
+
+        showMessage('dashboard-message', 'Dashboard saved successfully!', 'success');
     } catch (error) {
-        showMessage('dashboard-message', 'Error saving dashboard', 'error');
+        console.error('Error saving dashboard:', error);
+        showMessage('dashboard-message', error.message || 'Error saving dashboard', 'error');
     }
 }
 
@@ -741,48 +802,143 @@ function clearAllFilters() {
     updateTaskList();
 }
 
+async function exportTasksPDF() {
+    const date = document.getElementById('task-filter-date').value;
+    const employeeId = document.getElementById('task-filter-employee').value;
+    
+    // Build query string with filters
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (employeeId) params.append('employee_id', employeeId);
+    
+    const url = `/api/export/tasks?${params.toString()}`;
+    
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('PDF export failed');
+        }
+        
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'tasks.pdf';
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename="(.+)"/);
+            if (match) filename = match[1];
+        }
+        
+        // Download the PDF
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+        console.error('Error exporting tasks:', error);
+        alert('Failed to export tasks. Please try again.');
+    }
+}
+
+function addTaskRow() {
+    const container = document.getElementById('task-items');
+    if (!container) return;
+    const deadline = document.getElementById('task-date').value || currentDate;
+    const row = document.createElement('div');
+    row.className = 'task-item-row';
+    row.innerHTML = `
+        <div class="form-group task-name-field">
+            <label>Task Name *</label>
+            <input type="text" class="task-item-name" placeholder="Enter task name" required>
+        </div>
+        <div class="form-group">
+            <label>Status</label>
+            <select class="task-item-status">
+                <option value="Pending">Pending</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Done">Done</option>
+                <option value="Deadline Extended">Deadline Extended</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Deadline</label>
+            <input type="date" class="task-item-deadline" value="${deadline}">
+        </div>
+        <div class="form-group">
+            <label>Priority</label>
+            <select class="task-item-priority">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+            </select>
+        </div>
+        <button type="button" class="btn-small btn-delete remove-task-row" title="Remove task" onclick="removeTaskRow(this)">Remove</button>
+    `;
+    container.appendChild(row);
+    updateRemoveTaskButtons();
+    row.querySelector('.task-item-name').focus();
+}
+
+function removeTaskRow(button) {
+    button.closest('.task-item-row').remove();
+    updateRemoveTaskButtons();
+}
+
+function updateRemoveTaskButtons() {
+    const rows = document.querySelectorAll('.task-item-row');
+    rows.forEach(row => {
+        row.querySelector('.remove-task-row').disabled = rows.length === 1;
+    });
+}
+
 async function saveTask() {
+    const employeeId = document.getElementById('task-employee').value;
+    const taskDate = document.getElementById('task-date').value;
+    const rows = Array.from(document.querySelectorAll('.task-item-row'));
+    const taskItems = rows.map(row => ({
+        task_name: row.querySelector('.task-item-name').value.trim(),
+        status: row.querySelector('.task-item-status').value,
+        deadline: row.querySelector('.task-item-deadline').value || taskDate,
+        priority: row.querySelector('.task-item-priority').value
+    }));
+
+    if (!employeeId || !taskDate) {
+        showMessage('task-message', 'Please select an employee and date', 'error');
+        return;
+    }
+    const emptyTask = taskItems.findIndex(task => !task.task_name);
+    if (!taskItems.length || emptyTask !== -1) {
+        showMessage('task-message', 'Please enter a name for every task', 'error');
+        if (emptyTask !== -1) rows[emptyTask].querySelector('.task-item-name').focus();
+        return;
+    }
+
     const taskData = {
-        employee_id: document.getElementById('task-employee').value,
-        date: document.getElementById('task-date').value,
-        task_name: document.getElementById('task-name').value.trim(),
-        details: document.getElementById('task-details').value.trim(),
-        status: document.getElementById('task-status').value,
-        deadline: document.getElementById('task-deadline').value,
-        priority: document.getElementById('task-priority').value,
+        employee_id: employeeId,
+        date: taskDate,
         notes: document.getElementById('task-notes').value.trim(),
-        verified: document.getElementById('task-verified').value
+        verified: document.getElementById('task-verified').value,
+        tasks: taskItems
     };
-    
-    // Validate deadline is required when status is "Deadline Extended"
-    if (taskData.status === 'Deadline Extended' && !taskData.deadline) {
-        showMessage('task-message', 'Deadline is required when status is "Deadline Extended"', 'error');
-        document.getElementById('task-deadline').focus();
-        return;
-    }
-    
-    if (!taskData.employee_id || !taskData.task_name || !taskData.date) {
-        showMessage('task-message', 'Please fill required fields (Employee, Task Name, Date)', 'error');
-        return;
-    }
-    
+
     try {
         const response = await fetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(taskData)
         });
-        
         const data = await response.json();
-        if (data.success) {
-            showMessage('task-message', 'Task created successfully!', 'success');
-            resetTaskForm();
-            loadTasks(document.getElementById('task-filter-date').value);
-        } else {
-            showMessage('task-message', data.error || 'Failed to create task', 'error');
-        }
+        if (!response.ok || !data.success) throw new Error(data.error || 'Failed to create tasks');
+
+        showMessage('task-message', `${data.count} task${data.count === 1 ? '' : 's'} created successfully!`, 'success');
+        document.getElementById('task-filter-date').value = taskDate;
+        resetTaskForm();
+        await loadTasks(taskDate);
     } catch (error) {
-        showMessage('task-message', 'Error creating task', 'error');
+        showMessage('task-message', error.message || 'Error creating tasks', 'error');
     }
 }
 
@@ -893,13 +1049,10 @@ async function deleteTask(taskId) {
 
 function resetTaskForm() {
     document.getElementById('task-employee').value = '';
-    document.getElementById('task-name').value = '';
-    document.getElementById('task-details').value = '';
-    document.getElementById('task-status').value = 'Pending';
-    document.getElementById('task-deadline').value = '';
-    document.getElementById('task-priority').value = 'Medium';
     document.getElementById('task-notes').value = '';
     document.getElementById('task-verified').value = 'No';
+    document.getElementById('task-items').innerHTML = '';
+    addTaskRow();
 }
 
 // ============ HISTORY APIs ============
@@ -1018,6 +1171,10 @@ function setupEventListeners() {
     
     // Add Employee
     document.getElementById('add-employee').addEventListener('click', addEmployee);
+    document.getElementById('update-employee-btn').addEventListener('click', updateEmployee);
+    document.getElementById('close-employee-modal').addEventListener('click', () => {
+        document.getElementById('edit-employee-modal').style.display = 'none';
+    });
     
     // Save Dashboard
     document.getElementById('save-dashboard').addEventListener('click', saveDashboard);
@@ -1027,6 +1184,16 @@ function setupEventListeners() {
         const container = document.getElementById('task-form-container');
         container.style.display = container.style.display === 'none' ? 'block' : 'none';
     });
+    
+    document.getElementById('add-task-row').addEventListener('click', addTaskRow);
+    document.getElementById('task-date').addEventListener('change', (event) => {
+        document.querySelectorAll('.task-item-deadline').forEach(input => {
+            if (!input.value) input.value = event.target.value;
+        });
+    });
+    
+    // Export Tasks PDF
+    document.getElementById('export-tasks-pdf').addEventListener('click', exportTasksPDF);
     
     // Save Task
     document.getElementById('save-task').addEventListener('click', saveTask);
@@ -1077,13 +1244,7 @@ function setupEventListeners() {
     // Global search
     document.getElementById('search-all').addEventListener('input', applySearch);
     
-    // Status change handlers for deadline validation UI
-    document.getElementById('task-status').addEventListener('change', function() {
-        const isExtended = this.value === 'Deadline Extended';
-        document.getElementById('deadline-required').style.display = isExtended ? 'inline' : 'none';
-        document.getElementById('deadline-hint').style.display = isExtended ? 'block' : 'none';
-    });
-    
+    // Status change handler for deadline validation UI
     document.getElementById('edit-task-status').addEventListener('change', function() {
         const isExtended = this.value === 'Deadline Extended';
         document.getElementById('edit-deadline-required').style.display = isExtended ? 'inline' : 'none';

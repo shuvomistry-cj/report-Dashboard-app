@@ -28,7 +28,7 @@
             <button class="tab-btn active" data-tab="dashboard">Today's Dashboard</button>
             <button class="tab-btn" data-tab="create-dashboard">Create Dashboard</button>
             <button class="tab-btn" data-tab="employees">Add Employees</button>
-            <button class="tab-btn" data-tab="tasks">Create Tasks</button>
+            <button class="tab-btn" data-tab="tasks">Tasks</button>
             <button class="tab-btn" data-tab="history">Dashboard History</button>
         </nav>
 
@@ -269,7 +269,8 @@
                                 <th>Department</th>
                                 <th>Designation</th>
                                 <th>Type</th>
-                                <th>Action</th>
+                                <th>Status</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="employee-list">
@@ -278,10 +279,61 @@
                     </table>
                 </div>
             </div>
+
+            <div class="modal-overlay" id="edit-employee-modal" style="display: none;">
+                <div class="modal">
+                    <h3>Edit Employee</h3>
+                    <input type="hidden" id="edit-employee-id">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-employee-name">Full Name *</label>
+                            <input type="text" id="edit-employee-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-employee-department">Department *</label>
+                            <input type="text" id="edit-employee-department" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="edit-employee-designation">Designation *</label>
+                            <input type="text" id="edit-employee-designation" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-employee-type">Employee Type *</label>
+                            <select id="edit-employee-type" required>
+                                <option value="Full-time">Full-time</option>
+                                <option value="Part-time">Part-time</option>
+                                <option value="Contract">Contract</option>
+                                <option value="Intern">Intern</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-employee-status">User Status *</label>
+                        <select id="edit-employee-status" required>
+                            <option value="Active">Active</option>
+                            <option value="Left">Left</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" id="update-employee-btn">Update Employee</button>
+                        <button class="btn-secondary" id="close-employee-modal">Cancel</button>
+                        <div class="message" id="edit-employee-message"></div>
+                    </div>
+                </div>
+            </div>
         </section>
 
-        <!-- Tab 4: Create Tasks -->
+        <!-- Tab 4: Tasks -->
         <section id="tasks" class="tab-content">
+            <div class="tasks-header">
+                <h2>Task Management</h2>
+                <div class="tasks-controls">
+                    <button class="btn-export" id="export-tasks-pdf">Export Tasks to PDF</button>
+                    <button class="btn-primary" id="toggle-task-form">+ Create Tasks</button>
+                </div>
+            </div>
             <div class="tasks-controls">
                 <div class="filter-row">
                     <div class="form-group">
@@ -296,12 +348,11 @@
                     </div>
                     <button class="btn-secondary" id="apply-filters">Apply Filters</button>
                 </div>
-                <button class="btn-primary" id="toggle-task-form">+ Create New Task</button>
             </div>
 
             <!-- Expandable Task Form -->
             <div class="task-form-container" id="task-form-container" style="display: none;">
-                <h3>Create New Task</h3>
+                <h3>Create Tasks</h3>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="task-employee">Assign to Employee *</label>
@@ -314,40 +365,13 @@
                         <input type="date" id="task-date" required>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="task-name">Task Name *</label>
-                        <input type="text" id="task-name" placeholder="Enter task name" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="task-status">Status</label>
-                        <select id="task-status">
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Done">Done</option>
-                            <option value="Deadline Extended">Deadline Extended</option>
-                        </select>
-                    </div>
+
+                <div class="task-items-header">
+                    <h4>Tasks *</h4>
+                    <button type="button" class="btn-secondary" id="add-task-row">+ Add Task</button>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="task-deadline">Deadline <span id="deadline-required" style="color: #e74c3c; display: none;">*</span></label>
-                        <input type="date" id="task-deadline">
-                        <small id="deadline-hint" style="color: #e74c3c; display: none;">Deadline is required when status is "Deadline Extended"</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="task-priority">Priority</label>
-                        <select id="task-priority">
-                            <option value="Low">Low</option>
-                            <option value="Medium" selected>Medium</option>
-                            <option value="High">High</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="task-details">Details</label>
-                    <textarea id="task-details" rows="3" placeholder="Optional task details"></textarea>
-                </div>
+                <div id="task-items"></div>
+
                 <div class="form-row">
                     <div class="form-group">
                         <label for="task-notes">Notes</label>
@@ -362,7 +386,7 @@
                     </div>
                 </div>
                 <div class="form-actions">
-                    <button class="btn-primary" id="save-task">Save Task</button>
+                    <button class="btn-primary" id="save-task">Save Tasks</button>
                     <button class="btn-secondary" id="cancel-task">Cancel</button>
                     <div class="message" id="task-message"></div>
                 </div>

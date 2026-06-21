@@ -73,7 +73,7 @@
             {% set totals.pending = totals.pending + dash.pending_attention %}
             {% set totals.inprogress = totals.inprogress + dash.in_progress_count %}
             {% set totals.updated = totals.updated + dash.tasks_updated %}
-            {% set totals.verified = totals.verified + dash.verified_by_lead %}
+            {% set totals.verified = totals.verified + dash.verified_by_admin %}
             <tr>
                 <td class="date-cell">{{ dash.date }}</td>
                 <td class="number-cell">{{ dash.total_people }}</td>
@@ -85,7 +85,7 @@
                 <td class="number-cell {% if dash.pending_attention > 5 %}status-danger{% elif dash.pending_attention > 2 %}status-warning{% endif %}">{{ dash.pending_attention }}</td>
                 <td class="number-cell status-warning">{{ dash.in_progress_count }}</td>
                 <td class="number-cell">{{ dash.tasks_updated }}</td>
-                <td class="number-cell">{{ dash.verified_by_lead }}</td>
+                <td class="number-cell">{{ dash.verified_by_admin }}</td>
             </tr>
             {% endfor %}
             {% if dashboards|length > 0 %}

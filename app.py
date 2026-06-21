@@ -55,10 +55,15 @@ def get_db_connection(max_retries=5, retry_delay=1):
 def close_db_connection(conn):
     """Safely close database connection"""
     try:
-        if conn and not conn.closed:
+        if not conn:
+            return
+        if USE_POSTGRES:
+            if not conn.closed:
+                conn.close()
+        else:
             conn.close()
-    except:
-        pass
+    except Exception as e:
+        print(f"Warning: database connection could not be closed: {e}")
 
 def get_placeholder():
     """Return the right placeholder syntax for the database"""
@@ -112,6 +117,7 @@ def init_db():
                     employee_type TEXT NOT NULL,
                     initials TEXT NOT NULL,
                     color TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'Active',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )''')
                 
@@ -181,6 +187,7 @@ def init_db():
                     employee_type TEXT NOT NULL,
                     initials TEXT NOT NULL,
                     color TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'Active',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )''')
                 
@@ -240,6 +247,30 @@ def init_db():
                     FOREIGN KEY (employee_id) REFERENCES employees (id),
                     UNIQUE(date, employee_id, status)
                 )''')
+
+            # Bring older databases forward without deleting or recreating tables.
+            if USE_POSTGRES:
+                c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Active'")
+                c.execute("""SELECT column_name FROM information_schema.columns
+                             WHERE table_name = 'daily_stats'""")
+                daily_stats_columns = [row[0] for row in c.fetchall()]
+                if 'verified_by_admin' not in daily_stats_columns:
+                    if 'verified_by_lead' in daily_stats_columns:
+                        c.execute("ALTER TABLE daily_stats RENAME COLUMN verified_by_lead TO verified_by_admin")
+                    else:
+                        c.execute("ALTER TABLE daily_stats ADD COLUMN verified_by_admin INTEGER DEFAULT 0")
+            else:
+                c.execute("PRAGMA table_info(employees)")
+                employee_columns = [row[1] for row in c.fetchall()]
+                if 'status' not in employee_columns:
+                    c.execute("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'Active'")
+                c.execute("PRAGMA table_info(daily_stats)")
+                daily_stats_columns = [row[1] for row in c.fetchall()]
+                if 'verified_by_admin' not in daily_stats_columns:
+                    if 'verified_by_lead' in daily_stats_columns:
+                        c.execute("ALTER TABLE daily_stats RENAME COLUMN verified_by_lead TO verified_by_admin")
+                    else:
+                        c.execute("ALTER TABLE daily_stats ADD COLUMN verified_by_admin INTEGER DEFAULT 0")
             
             conn.commit()
             close_db_connection(conn)
@@ -273,32 +304,81 @@ def employees():
         department = data.get('department')
         designation = data.get('designation')
         employee_type = data.get('employee_type')
+        status = data.get('status', 'Active')
+        if not all([name, department, designation, employee_type]):
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'All employee fields are required'}), 400
+        if status not in ('Active', 'Left'):
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Invalid employee status'}), 400
         initials = ''.join([n[0] for n in name.split()[:2]]).upper()
         colors = ['#3498db', '#9b59b6', '#2ecc71', '#f39c12', '#e74c3c', '#1abc9c', '#34495e', '#16a085']
         color = colors[hash(name) % len(colors)]
         
         ph = get_placeholder()
-        c.execute(format_query(f'''INSERT INTO employees (name, department, designation, employee_type, initials, color)
-                     VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})'''),
-                  (name, department, designation, employee_type, initials, color))
+        c.execute(format_query(f'''INSERT INTO employees (name, department, designation, employee_type, initials, color, status)
+                     VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})'''),
+                  (name, department, designation, employee_type, initials, color, status))
         conn.commit()
         close_db_connection(conn)
         return jsonify({'success': True, 'message': 'Employee added successfully'})
     
-    c.execute('SELECT * FROM employees ORDER BY name')
+    c.execute('''SELECT id, name, department, designation, employee_type, initials, color, status
+                 FROM employees ORDER BY name''')
     employees = [{'id': row[0], 'name': row[1], 'department': row[2], 'designation': row[3], 
-                  'employee_type': row[4], 'initials': row[5], 'color': row[6]} for row in c.fetchall()]
+                  'employee_type': row[4], 'initials': row[5], 'color': row[6],
+                  'status': row[7]} for row in c.fetchall()]
     close_db_connection(conn)
     return jsonify(employees)
 
-@app.route('/api/employees/<int:emp_id>', methods=['DELETE'])
-def delete_employee(emp_id):
+@app.route('/api/employees/<int:emp_id>', methods=['PUT', 'DELETE'])
+def employee_detail(emp_id):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute(format_query('DELETE FROM employees WHERE id = ?'), (emp_id,))
-    conn.commit()
-    close_db_connection(conn)
-    return jsonify({'success': True})
+    try:
+        c.execute(format_query('SELECT id FROM employees WHERE id = ?'), (emp_id,))
+        if not c.fetchone():
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+
+        if request.method == 'PUT':
+            data = request.get_json() or {}
+            name = (data.get('name') or '').strip()
+            department = (data.get('department') or '').strip()
+            designation = (data.get('designation') or '').strip()
+            employee_type = data.get('employee_type')
+            status = data.get('status', 'Active')
+            if not all([name, department, designation, employee_type]):
+                close_db_connection(conn)
+                return jsonify({'success': False, 'error': 'All employee fields are required'}), 400
+            if status not in ('Active', 'Left'):
+                close_db_connection(conn)
+                return jsonify({'success': False, 'error': 'Invalid employee status'}), 400
+
+            initials = ''.join(part[0] for part in name.split()[:2]).upper()
+            c.execute(format_query('''UPDATE employees
+                        SET name = ?, department = ?, designation = ?, employee_type = ?,
+                            initials = ?, status = ?
+                        WHERE id = ?'''),
+                      (name, department, designation, employee_type, initials, status, emp_id))
+            conn.commit()
+            close_db_connection(conn)
+            return jsonify({'success': True, 'message': 'Employee updated successfully'})
+
+        # Remove dependent records first so deletion behaves consistently in
+        # SQLite and PostgreSQL and never leaves orphaned employee data.
+        deleted = {}
+        for table in ('tasks', 'employee_daily_stats', 'dashboard_employee_status'):
+            c.execute(format_query(f'DELETE FROM {table} WHERE employee_id = ?'), (emp_id,))
+            deleted[table] = c.rowcount
+        c.execute(format_query('DELETE FROM employees WHERE id = ?'), (emp_id,))
+        conn.commit()
+        close_db_connection(conn)
+        return jsonify({'success': True, 'deleted_related_records': deleted})
+    except Exception as e:
+        conn.rollback()
+        close_db_connection(conn)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============ DAILY STATS APIs ============
 @app.route('/api/daily-stats/<date_str>', methods=['GET', 'POST', 'PUT'])
@@ -321,6 +401,7 @@ def daily_stats(date_str):
             close_db_connection(conn)
             return jsonify({'success': True})
         except Exception as e:
+            conn.rollback()
             close_db_connection(conn)
             return jsonify({'success': False, 'error': str(e)}), 500
     
@@ -383,17 +464,60 @@ def tasks():
     c = conn.cursor()
     
     if request.method == 'POST':
-        data = request.get_json()
-        c.execute(format_query('''INSERT INTO tasks (employee_id, task_name, details, status, deadline, priority, notes, verified, date)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'''),
-                  (data['employee_id'], data['task_name'], data.get('details', ''),
-                   data.get('status', 'Pending'), data.get('deadline', ''),
-                   data.get('priority', 'Medium'), data.get('notes', ''),
-                   1 if data.get('verified') == 'Yes' else 0, data['date']))
-        conn.commit()
-        task_id = get_lastrowid(c)
-        close_db_connection(conn)
-        return jsonify({'success': True, 'id': task_id})
+        data = request.get_json() or {}
+        task_items = data.get('tasks')
+        if task_items is None:
+            task_items = [data]
+        if not isinstance(task_items, list) or not task_items:
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Add at least one task'}), 400
+
+        employee_id = data.get('employee_id')
+        task_date = data.get('date')
+        notes = data.get('notes', '')
+        verified = data.get('verified', 'No')
+        if not employee_id or not task_date:
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Employee and date are required'}), 400
+
+        c.execute(format_query("SELECT id FROM employees WHERE id = ? AND status = 'Active'"), (employee_id,))
+        if not c.fetchone():
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Select an active employee'}), 400
+
+        allowed_statuses = ('Pending', 'In Progress', 'Done', 'Deadline Extended')
+        allowed_priorities = ('Low', 'Medium', 'High')
+        created_ids = []
+        try:
+            for item in task_items:
+                task_name = (item.get('task_name') or '').strip()
+                status = item.get('status', 'Pending')
+                priority = item.get('priority', 'Medium')
+                deadline = item.get('deadline') or task_date
+                if not task_name:
+                    raise ValueError('Every task must have a task name')
+                if status not in allowed_statuses:
+                    raise ValueError(f'Invalid task status: {status}')
+                if priority not in allowed_priorities:
+                    raise ValueError(f'Invalid task priority: {priority}')
+
+                c.execute(format_query('''INSERT INTO tasks
+                            (employee_id, task_name, details, status, deadline, priority, notes, verified, date)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'''),
+                          (employee_id, task_name, item.get('details', ''), status, deadline,
+                           priority, notes, 1 if verified == 'Yes' else 0, task_date))
+                created_ids.append(get_lastrowid(c))
+            conn.commit()
+            close_db_connection(conn)
+            return jsonify({'success': True, 'ids': created_ids, 'count': len(created_ids)})
+        except (ValueError, KeyError) as e:
+            conn.rollback()
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            conn.rollback()
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # GET with filters
     date_filter = request.args.get('date', date.today().isoformat())
@@ -432,6 +556,11 @@ def task_detail(task_id):
     
     if request.method == 'PUT':
         data = request.get_json()
+        c.execute(format_query("SELECT id FROM employees WHERE id = ? AND status = 'Active'"),
+                  (data.get('employee_id'),))
+        if not c.fetchone():
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': 'Select an active employee'}), 400
         # Handle empty deadline for PostgreSQL
         deadline = data.get('deadline') if data.get('deadline') else None
         
@@ -566,6 +695,83 @@ def export_dashboard_pdf(date_str):
     response.headers['Content-Disposition'] = f'attachment; filename=dashboard_{date_str}.pdf'
     return response
 
+@app.route('/api/export/tasks')
+def export_tasks_pdf():
+    """Export tasks to PDF with optional filters"""
+    if not PLAYWRIGHT_AVAILABLE:
+        return jsonify({'error': 'PDF export not available. Install Playwright to enable PDF export.'}), 503
+    
+    # Get filter parameters
+    date_filter = request.args.get('date', '')
+    employee_filter = request.args.get('employee_id', '')
+    status_filter = request.args.get('status', '')
+    
+    # Build query based on filters
+    conn = get_db_connection()
+    c = conn.cursor()
+    
+    query = '''SELECT t.*, e.name as employee_name, e.designation 
+               FROM tasks t 
+               JOIN employees e ON t.employee_id = e.id
+               WHERE 1=1'''
+    params = []
+    
+    if date_filter:
+        query += ' AND t.date = ?'
+        params.append(date_filter)
+    if employee_filter:
+        query += ' AND t.employee_id = ?'
+        params.append(employee_filter)
+    if status_filter:
+        query += ' AND t.status = ?'
+        params.append(status_filter)
+    
+    query += ' ORDER BY t.created_at DESC'
+    
+    c.execute(format_query(query), tuple(params))
+    rows = c.fetchall()
+    close_db_connection(conn)
+    
+    tasks = []
+    for row in rows:
+        tasks.append({
+            'id': row[0], 'employee_id': row[1], 'task_name': row[2], 'details': row[3],
+            'status': row[4], 'deadline': row[5], 'priority': row[6], 'notes': row[7],
+            'verified': row[8], 'date': row[9], 'created_at': row[10],
+            'employee_name': row[12], 'designation': row[13]
+        })
+    
+    # Render HTML template for tasks
+    html_content = render_template('tasks_pdf.html', 
+                                   tasks=tasks,
+                                   date_filter=date_filter,
+                                   employee_filter=employee_filter,
+                                   status_filter=status_filter)
+    
+    # Use Playwright to convert HTML to PDF
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html_content)
+        pdf = page.pdf(format='A4', print_background=True)
+        browser.close()
+    
+    # Build filename based on filters
+    filename_parts = ['tasks']
+    if date_filter:
+        filename_parts.append(date_filter)
+    if employee_filter:
+        filename_parts.append(f'emp{employee_filter}')
+    if status_filter:
+        filename_parts.append(status_filter.replace(' ', '_'))
+    
+    filename = '_'.join(filename_parts) + '.pdf'
+    
+    response = make_response(pdf)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    return response
+
 @app.route('/api/export/dashboard-bulk')
 def export_dashboard_bulk():
     start_date = request.args.get('start_date')
@@ -643,8 +849,8 @@ def get_dashboard_stats(date_str):
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Get total employees
-    c.execute('SELECT COUNT(*) FROM employees')
+    # Left employees remain in history but are excluded from new dashboards.
+    c.execute("SELECT COUNT(*) FROM employees WHERE status = 'Active'")
     total_people = c.fetchone()[0]
     
     # Get task counts by status for the date
@@ -667,6 +873,7 @@ def get_dashboard_stats(date_str):
                     SUM(CASE WHEN t.status = 'In Progress' THEN 1 ELSE 0 END) as in_progress
                  FROM employees e
                  LEFT JOIN tasks t ON e.id = t.employee_id AND t.date = ?
+                 WHERE e.status = 'Active'
                  GROUP BY e.id'''), (date_str,))
     
     employee_stats = []
@@ -707,20 +914,43 @@ def dashboard_employee_status(date_str):
     c = conn.cursor()
     
     if request.method == 'POST':
-        data = request.get_json()
-        # Clear existing status for this date
-        c.execute(format_query('DELETE FROM dashboard_employee_status WHERE date = ?'), (date_str,))
-        # Insert new status
-        for item in data:
-            c.execute(format_query('''INSERT INTO dashboard_employee_status (date, employee_id, status)
-                        VALUES (?, ?, ?)'''),
-                      (date_str, item['employee_id'], item['status']))
-        conn.commit()
-        close_db_connection(conn)
-        return jsonify({'success': True})
+        data = request.get_json() or []
+        try:
+            employee_ids = [item.get('employee_id') for item in data]
+            if any(item.get('status') not in ('Active', 'On Leave') for item in data):
+                raise ValueError('Invalid attendance status')
+
+            if employee_ids:
+                placeholders = ', '.join([get_placeholder()] * len(employee_ids))
+                c.execute(format_query(
+                    f"SELECT id FROM employees WHERE status = 'Active' AND id IN ({placeholders})"
+                ), tuple(employee_ids))
+                active_ids = {row[0] for row in c.fetchall()}
+                if active_ids != set(employee_ids):
+                    raise ValueError('Left employees cannot be added to attendance or leave')
+
+            c.execute(format_query('DELETE FROM dashboard_employee_status WHERE date = ?'), (date_str,))
+            for item in data:
+                c.execute(format_query('''INSERT INTO dashboard_employee_status (date, employee_id, status)
+                            VALUES (?, ?, ?)'''),
+                          (date_str, item['employee_id'], item['status']))
+            conn.commit()
+            close_db_connection(conn)
+            return jsonify({'success': True})
+        except (ValueError, KeyError) as e:
+            conn.rollback()
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': str(e)}), 400
+        except Exception as e:
+            conn.rollback()
+            close_db_connection(conn)
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # GET - return active and on leave employee lists
-    c.execute(format_query('''SELECT employee_id, status FROM dashboard_employee_status WHERE date = ?'''), (date_str,))
+    c.execute(format_query('''SELECT des.employee_id, des.status
+                  FROM dashboard_employee_status des
+                  JOIN employees e ON e.id = des.employee_id
+                  WHERE des.date = ? AND e.status = 'Active' '''), (date_str,))
     rows = c.fetchall()
     close_db_connection(conn)
     

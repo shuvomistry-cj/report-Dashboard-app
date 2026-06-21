@@ -653,6 +653,70 @@ body {
     margin-bottom: 15px;
 }
 
+.hint {
+    display: block;
+    margin-top: 5px;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.employee-status {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.employee-status.status-active {
+    background: rgba(46, 204, 113, 0.16);
+    color: #2ecc71;
+}
+
+.employee-status.status-left {
+    background: rgba(148, 163, 184, 0.16);
+    color: #cbd5e1;
+}
+
+.task-items-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 6px 0 12px;
+}
+
+.task-items-header h4 {
+    color: #e2e8f0;
+    font-size: 14px;
+}
+
+.task-item-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) minmax(140px, 1fr) minmax(150px, 1fr) minmax(120px, 0.8fr) auto;
+    gap: 12px;
+    align-items: end;
+    padding: 14px;
+    margin-bottom: 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+}
+
+.task-item-row .form-group input,
+.task-item-row .form-group select {
+    background: #111c31;
+}
+
+.task-item-row .remove-task-row {
+    margin-bottom: 1px;
+}
+
+.task-item-row .remove-task-row:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
 /* Modal */
 .modal-overlay {
     position: fixed;
@@ -762,6 +826,15 @@ body {
     
     .filter-row {
         flex-direction: column;
+    }
+
+    .task-item-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+    }
+
+    .task-item-row .remove-task-row {
+        justify-self: start;
     }
 }
 

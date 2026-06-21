@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tasks Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #fff;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        
+        .filters {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+        
+        .filters h3 {
+            font-size: 12px;
+            color: #3498db;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        
+        .filter-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .filter-tag {
+            background: #0f172a;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #334155;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #3498db;
+        }
+        
+        .stat-label {
+            font-size: 10px;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1e293b;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+        
+        thead {
+            background: #3498db;
+        }
+        
+        th {
+            padding: 12px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            text-transform: uppercase;
+        }
+        
+        td {
+            padding: 10px 12px;
+            font-size: 11px;
+            color: #e2e8f0;
+            border-bottom: 1px solid #334155;
+        }
+        
+        tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .employee {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .employee-name {
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .employee-designation {
+            font-size: 10px;
+            color: #94a3b8;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+        
+        .status-pending {
+            background: #f39c12;
+            color: #000;
+        }
+        
+        .status-in-progress {
+            background: #3498db;
+            color: #fff;
+        }
+        
+        .status-done {
+            background: #2ecc71;
+            color: #000;
+        }
+        
+        .status-deadline-extended {
+            background: #e74c3c;
+            color: #fff;
+        }
+        
+        .priority {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+        
+        .priority-high {
+            background: #e74c3c;
+            color: #fff;
+        }
+        
+        .priority-medium {
+            background: #f39c12;
+            color: #000;
+        }
+        
+        .priority-low {
+            background: #2ecc71;
+            color: #000;
+        }
+        
+        .verified {
+            color: #2ecc71;
+            font-weight: 600;
+        }
+        
+        .not-verified {
+            color: #e74c3c;
+        }
+        
+        .no-tasks {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #334155;
+            font-size: 10px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>TASKS REPORT</h1>
+        <p>Generated on {{ now.strftime('%B %d, %Y at %I:%M %p') }}</p>
+    </div>
+    
+    <div class="filters">
+        <h3>Applied Filters</h3>
+        <div class="filter-tags">
+            {% if date_filter %}
+            <span class="filter-tag">Date: {{ date_filter }}</span>
+            {% endif %}
+            {% if employee_filter %}
+            <span class="filter-tag">Employee ID: {{ employee_filter }}</span>
+            {% endif %}
+            {% if status_filter %}
+            <span class="filter-tag">Status: {{ status_filter }}</span>
+            {% endif %}
+            {% if not date_filter and not employee_filter and not status_filter %}
+            <span class="filter-tag">All Tasks</span>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value">{{ tasks|length }}</div>
+            <div class="stat-label">Total Tasks</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ tasks|selectattr('status', 'equalto', 'Done')|list|length }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ tasks|selectattr('status', 'equalto', 'Pending')|list|length }}</div>
+            <div class="stat-label">Pending</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ tasks|selectattr('status', 'equalto', 'In Progress')|list|length }}</div>
+            <div class="stat-label">In Progress</div>
+        </div>
+    </div>
+    
+    {% if tasks %}
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Task</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Deadline</th>
+                <th>Date</th>
+                <th>Verified</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td>
+                    <div class="employee">
+                        <span class="employee-name">{{ task.employee_name }}</span>
+                        <span class="employee-designation">{{ task.designation }}</span>
+                    </div>
+                </td>
+                <td>{{ task.task_name }}</td>
+                <td>
+                    <span class="status status-{{ task.status|lower|replace(' ', '-') }}">
+                        {{ task.status }}
+                    </span>
+                </td>
+                <td>
+                    <span class="priority priority-{{ task.priority|lower }}">
+                        {{ task.priority }}
+                    </span>
+                </td>
+                <td>{{ task.deadline or '-' }}</td>
+                <td>{{ task.date }}</td>
+                <td class="{{ 'verified' if task.verified else 'not-verified' }}">
+                    {{ 'Yes' if task.verified else 'No' }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="no-tasks">
+        No tasks found matching the applied filters.
+    </div>
+    {% endif %}
+    
+    <div class="footer">
+        <p>© 2024 Daily Work Progress Dashboard - Confidential</p>
+    </div>
+</body>
+</html>
